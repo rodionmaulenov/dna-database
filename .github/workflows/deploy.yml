@@ -39,8 +39,8 @@ jobs:
           
           # Create production environment file
           echo "⚙️  Configuring environment..."
-          cat > .env.production << 'EOF'
-           DEBUG=False
+          cat > .env.production <<EOF
+          DEBUG=False
           SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}
           ALLOWED_HOSTS=${{ secrets.EC2_HOST }},63.180.181.174,localhost,127.0.0.1
           
@@ -61,7 +61,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_STORAGE_BUCKET_NAME=${{ secrets.AWS_STORAGE_BUCKET_NAME }}
           AWS_S3_REGION_NAME=${{ secrets.AWS_S3_REGION_NAME }}
-          USE_S3=True
+          USE_S3=False
           EOF
           
           # Stop old containers
