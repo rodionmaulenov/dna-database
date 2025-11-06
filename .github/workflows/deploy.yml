@@ -39,7 +39,7 @@ jobs:
           
           # Create production environment file
           echo "⚙️  Configuring environment..."
-          cat > .env.production <<EOF
+          cat > .env <<EOF
           DEBUG=False
           SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}
           ALLOWED_HOSTS=${{ secrets.EC2_HOST }},63.180.181.174,localhost,127.0.0.1
@@ -67,6 +67,10 @@ jobs:
           # Stop old containers
           echo "🛑 Stopping old containers..."
           docker-compose -f docker-compose.prod.yml down 2>/dev/null || true
+          
+          # Clean up old images
+          echo "🧹 Cleaning up old images..."
+          docker image prune -f
           
           # Build and start new containers
           echo "🏗️  Building containers..."
