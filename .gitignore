@@ -13,6 +13,7 @@ backend/.env
 # Python / Django (Backend)
 # ==========================================
 __pycache__/
+*.pyc
 *.py[cod]
 *$py.class
 *.so
@@ -82,6 +83,7 @@ yarn.lock
 backend/media/uploads/*.pdf
 backend/media/uploads/*.jpg
 backend/media/uploads/*.png
+migrations/
 
 # ==========================================
 # Testing
