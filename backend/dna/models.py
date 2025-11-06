@@ -1,5 +1,7 @@
 from django.db import models
+from django_cleanup import cleanup
 
+@cleanup.select
 class UploadedFile(models.Model):
     file = models.FileField(upload_to='uploads/')
     overall_confidence = models.FloatField(
@@ -10,6 +12,7 @@ class UploadedFile(models.Model):
 
     class Meta:
         ordering = ['-uploaded_at']
+
 
 
 class Person(models.Model):
