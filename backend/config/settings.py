@@ -53,9 +53,6 @@ INSTALLED_APPS = [
     'storages',
     'corsheaders',
     'dna',
-
-    # Must be last!
-    'django_cleanup.apps.CleanupConfig',
 ]
 
 MIDDLEWARE = [
