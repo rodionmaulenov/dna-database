@@ -1,0 +1,46 @@
+<div class="upload-container">
+
+  <div class="active-button">
+    <!-- Toggle -->
+    <mat-button-toggle-group
+      [value]="tableStore.roleFilter()"
+      (change)="setFilter($event.value)">
+      <mat-button-toggle value="parent">
+        <div class="icon-alignment">
+          <mat-icon>people</mat-icon>
+          <span>Parents</span>
+        </div>
+      </mat-button-toggle>
+      <mat-button-toggle value="child">
+        <div class="icon-alignment">
+          <mat-icon>child_care</mat-icon>
+          <span>Children</span>
+        </div>
+      </mat-button-toggle>
+    </mat-button-toggle-group>
+
+    <div class="upload-trigger">
+      <button mat-raised-button color="primary" (click)="openUploadSheet()">
+        <mat-icon>open_in_new</mat-icon>
+        Popup
+      </button>
+    </div>
+
+    <!-- ⭐ Active Filter Chip -->
+    @if (tableStore.currentPersonFilter()) {
+      <mat-chip-set>
+        <mat-chip highlighted (removed)="clearFilter()">
+          <mat-icon matChipAvatar>person</mat-icon>
+          {{ tableStore.filteredPersonName() }}
+          <button matChipRemove>
+            <mat-icon>cancel</mat-icon>
+          </button>
+        </mat-chip>
+      </mat-chip-set>
+    }
+
+  </div>
+
+  <app-dna-table></app-dna-table>
+
+</div>

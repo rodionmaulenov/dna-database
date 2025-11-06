@@ -1,0 +1,71 @@
+@use 'modern-normalize/modern-normalize.css';
+@use '@angular/material' as mat;
+
+html {
+  @include mat.theme((
+    color: (
+      primary: mat.$cyan-palette,
+      tertiary: mat.$orange-palette,
+    ),
+    typography: Roboto,
+    density: 0,
+  ));
+}
+
+:root {
+  @include mat.form-field-overrides((
+    filled-container-color: transparent,
+    state-layer-color: transparent,
+    filled-active-indicator-color: transparent,
+    filled-hover-active-indicator-color: transparent,
+    container-text-size: 14px,
+  ));
+
+  @include mat.select-overrides((
+    trigger-text-size: 14px,
+  ));
+
+  @include mat.list-overrides((
+    list-item-disabled-state-layer-color: transparent,
+    list-item-hover-state-layer-color: transparent,
+    active-indicator-shape: 16px,
+  ));
+}
+
+// ⭐ Global reset
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+// ⭐ Allow page to scroll vertically
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh; // ⭐ Changed back to min-height
+  overflow-x: hidden; // ⭐ Prevent horizontal page scroll
+  overflow-y: auto; // ⭐ Allow vertical page scroll
+}
+
+body {
+  color-scheme: light;
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+  box-sizing: border-box;
+}
+
+// ⭐ Material components
+mat-card, mat-form-field, mat-table {
+  box-sizing: border-box;
+}
+
+// ⭐ Root component
+app-root {
+  display: block;
+  min-height: 100vh;
+  width: 100%;
+}
+

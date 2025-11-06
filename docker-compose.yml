@@ -1,0 +1,88 @@
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: dna-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dna
+      POSTGRES_USER: dna_user
+      POSTGRES_PASSWORD: dna_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U dna_user -d dna" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (for Celery)
+  redis:
+    image: redis:7-alpine
+    container_name: dna-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Django Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dna-backend
+    restart: unless-stopped
+    command: >
+      bash -c "python manage.py makemigrations --noinput &&
+               python manage.py migrate --noinput &&
+               python manage.py collectstatic --noinput &&
+               gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120"
+    env_file:
+      - ./backend/.env.docker
+    volumes:
+      - ./backend/media:/app/media
+      - ./backend/staticfiles:/app/staticfiles
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Celery Worker
+  celery:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: dna-celery
+    restart: unless-stopped
+    command: celery -A config worker -l info
+    env_file:
+      - ./backend/.env.docker
+    volumes:
+      - ./backend/media:/app/media
+    depends_on:
+      - backend
+      - redis
+
+  # Nginx - Serves Angular + Proxies API
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: dna-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
