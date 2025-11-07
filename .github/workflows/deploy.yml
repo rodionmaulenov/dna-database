@@ -65,10 +65,6 @@ jobs:
           USE_S3=True
           EOF
           
-          # Stop old containers
-          echo "🛑 Stopping old containers..."
-          docker rm -f $(docker ps -qq)
-          
           # Build and start new containers
           echo "🏗️  Building containers..."
           docker-compose -f docker-compose.prod.yml up -d --build
