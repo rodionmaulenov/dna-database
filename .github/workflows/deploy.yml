@@ -78,4 +78,4 @@ jobs:
           docker-compose -f docker-compose.prod.yml ps
           
           echo "✅ Deployment complete!"
-          echo "🌐 App: http://${{ secrets.ALLOWED_HOSTS }}"
+          echo "🌐 App: http://${{ secrets.EC2_HOST }}"
