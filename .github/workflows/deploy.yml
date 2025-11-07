@@ -66,11 +66,11 @@ jobs:
           
           # Stop old containers
           echo "🛑 Stopping old containers..."
-          docker-compose -f docker-compose.prod.yml down 2>/dev/null || true
+          docker rm -f $(docker ps -qq)
           
           # Clean up old images
           echo "🧹 Cleaning up old images..."
-          docker image prune -f
+          docker rmi -f $(docker images -q)
           
           # Build and start new containers
           echo "🏗️  Building containers..."

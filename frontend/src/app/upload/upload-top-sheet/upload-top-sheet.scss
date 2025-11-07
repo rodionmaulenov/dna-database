@@ -31,8 +31,6 @@
 
 .files-list {
   margin-top: 16px;
-  // max-height: 400px;  // ⭐ REMOVE THIS
-  // overflow-y: auto;   // ⭐ REMOVE THIS
   flex: 1;  // ⭐ Take remaining space
   min-height: 0;  // ⭐ Allow shrinking
 }
@@ -102,4 +100,15 @@
   25% { content: '.'; }
   50% { content: '..'; }
   75% { content: '...'; }
+}
+
+.person-link-upload {
+  cursor: pointer;
+  color: #004f4f;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.person-link-upload:hover {
+  text-decoration: underline;
 }

@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 
 from typing import Optional
 
@@ -13,12 +14,60 @@ from ninja import File, UploadedFile as NinjaUploadedFile
 
 from dna.models import UploadedFile, DNALocus, Person
 from dna.schemas import FileUploadResponse, DNADataListResponse, PersonData, LocusData, DNADataResponse, \
-    UpdateLocusRequest, UpdatePersonRequest
+    UpdateLocusRequest, UpdatePersonRequest, CreateLocusRequest
 from dna.tasks import process_file_upload, match_file_task
 
 logger = logging.getLogger(__name__)
 
 upload_router = Router()
+
+
+def _generate_file_url(file_path: str) -> str:
+    """
+    Generate download URL for file (S3 presigned or local)
+
+    Args:
+        file_path: File path in storage (e.g., 'uploads/file.pdf')
+
+    Returns:
+        Full download URL
+    """
+    if not file_path:
+        return ''
+
+    try:
+        if settings.USE_S3:
+            import boto3
+            from botocore.client import Config
+
+            # Create S3 client
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                region_name=settings.AWS_S3_REGION_NAME,
+                config=Config(signature_version='s3v4')
+            )
+
+            # Generate presigned URL (valid for 1 hour)
+            url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={
+                    'Bucket': settings.AWS_STORAGE_BUCKET_NAME,
+                    'Key': file_path
+                },
+                ExpiresIn=3600  # 1 hour
+            )
+
+            logger.debug(f"Generated signed URL for {file_path}")
+            return url
+        else:
+            # Local storage
+            return default_storage.url(file_path)
+
+    except Exception as e:
+        logger.error(f"Failed to generate URL for {file_path}: {e}")
+        return file_path  # Fallback to path
 
 
 @upload_router.post('file/', response={200: FileUploadResponse, 400: FileUploadResponse})
@@ -31,19 +80,27 @@ def upload_files(request, file: File[NinjaUploadedFile]):
                 errors=["Only PDF files are allowed"],
             )
 
-        relative_path = default_storage.save(f'uploads/{file.name}', file)
-        absolute_path = os.path.join(settings.MEDIA_ROOT, relative_path)
+        # ✅ Save to LOCAL temp directory first
+        temp_dir = os.path.join(settings.BASE_DIR, 'media/uploads')
+        os.makedirs(temp_dir, exist_ok=True)
 
-        logger.info(f"Processing upload: {file.name}")
+        local_file_path = os.path.join(temp_dir, file.name)
+
+        # Write file to local disk
+        with open(local_file_path, 'wb+') as destination:
+            for chunk in file.chunks():
+                destination.write(chunk)
+
+        logger.info(f"✅ Saved locally for processing: {local_file_path}")
 
         result = process_file_upload.apply_async(
-            args=[absolute_path, file.name]
+            args=[local_file_path, file.name]
         ).get()
 
-        # Clean up temp file
-        if os.path.exists(absolute_path):
-            os.remove(absolute_path)
-            logger.info(f"Cleaned up temporary file: {absolute_path}")
+        # # Clean up temp file
+        if os.path.exists(local_file_path):
+            os.remove(local_file_path)
+            logger.info(f"Cleaned up temporary file: {local_file_path}")
 
         if result.get('success'):
             logger.info(f"Successfully processed: {file.name}")
@@ -87,21 +144,28 @@ def match_file(request, file: File[NinjaUploadedFile], role: str = Form(...)):
                 errors=["Invalid role. Must be 'father', 'mother', or 'child'"],
             )
 
-        # Save temporarily
-        relative_path = default_storage.save(f'temp/{file.name}', file)
-        absolute_path = os.path.join(settings.MEDIA_ROOT, relative_path)
+        # ✅ Save to LOCAL temp directory first
+        temp_dir = os.path.join(settings.BASE_DIR, 'media/uploads')
+        os.makedirs(temp_dir, exist_ok=True)
+
+        local_file_path = os.path.join(temp_dir, file.name)
+
+        # Write file to local disk
+        with open(local_file_path, 'wb+') as destination:
+            for chunk in file.chunks():
+                destination.write(chunk)
 
         logger.info(f"Matching file: {file.name} as {role}")
 
         # Call matching task (NOT upload task)
         result = match_file_task.apply_async(
-            args=[absolute_path, file.name, role]
+            args=[local_file_path, file.name, role]
         ).get(timeout=300)
 
         # Clean up temp file
-        if os.path.exists(absolute_path):
-            os.remove(absolute_path)
-            logger.info(f"Cleaned up temporary file: {absolute_path}")
+        if os.path.exists(local_file_path):
+            os.remove(local_file_path)
+            logger.info(f"Cleaned up temporary file: {local_file_path}")
 
         if result.get('success'):
             logger.info(f"Successfully matched: {file.name}")
@@ -133,7 +197,7 @@ def get_all_dna_data(
         page_size: int = Query(50, ge=1, le=100, description="Items per page")
 ):
     """
-    Get DNA data with overall confidence and upload dates from UploadedFile
+    Get DNA data with signed download URLs
     """
     try:
         uploads_query = UploadedFile.objects.prefetch_related(
@@ -156,6 +220,9 @@ def get_all_dna_data(
 
         for upload in uploads:
             persons = upload.persons.all()
+
+            # ✅ Generate signed URL
+            file_url = _generate_file_url(upload.file.name if upload.file else '')
 
             if person_id:
                 matching_person = persons.filter(id=person_id).first()
@@ -203,9 +270,8 @@ def get_all_dna_data(
 
                     result.append(DNADataResponse(
                         id=upload.id,
-                        file=upload.file.name if upload.file else '',
+                        file=file_url,
                         uploaded_at=upload.uploaded_at.isoformat(),
-                        overall_confidence=upload.overall_confidence,
                         parent=parent_data,
                         child=child_data
                     ))
@@ -250,9 +316,8 @@ def get_all_dna_data(
 
                     result.append(DNADataResponse(
                         id=upload.id,
-                        file=upload.file.name if upload.file else '',
+                        file=file_url,
                         uploaded_at=upload.uploaded_at.isoformat(),
-                        overall_confidence=upload.overall_confidence,
                         parent=parent_data,
                         child=child_data
                     ))
@@ -300,9 +365,8 @@ def get_all_dna_data(
 
                 result.append(DNADataResponse(
                     id=upload.id,
-                    file=upload.file.name if upload.file else '',
+                    file=file_url,
                     uploaded_at=upload.uploaded_at.isoformat(),
-                    overall_confidence=upload.overall_confidence,
                     parent=parent_data,
                     child=child_data
                 ))
@@ -321,22 +385,57 @@ def get_all_dna_data(
 
 @upload_router.patch('/persons/{person_id}/')
 def update_person(request, person_id: int, data: UpdatePersonRequest):
-    """Update person name"""
+    """Update person name and/or role"""
     try:
         person = get_object_or_404(Person, id=person_id)
-        person.name = data.name
+
+        updated_fields = []
+
+        # Update name if provided
+        if data.name is not None:
+            person.name = data.name
+            updated_fields.append('name')
+
+        # ✅ Update role if provided
+        if data.role is not None:
+            # Validate role
+            if data.role not in ['father', 'mother', 'child']:
+                logger.error(f"Invalid role: {data.role}")
+                return 422, {
+                    'success': False,
+                    'message': f"Invalid role: {data.role}. Must be 'father', 'mother', or 'child'"
+                }
+
+            person.role = data.role
+            updated_fields.append('role')
+
+        # Check if anything to update
+        if not updated_fields:
+            return 400, {
+                'success': False,
+                'message': 'No fields to update'
+            }
+
         person.save()
 
-        logger.info(f"Updated person {person_id} name to: {data.name}")
+        logger.info(f"✅ Updated person {person_id}: {', '.join(updated_fields)}")
 
-        return {
+        return 200, {
             'success': True,
-            'message': f'Updated name to {data.name}',
-            'data': {'id': person.id, 'name': person.name}
+            'message': f'Updated {", ".join(updated_fields)}',
+            'data': {
+                'id': person.id,
+                'name': person.name,
+                'role': person.role
+            }
         }
+
     except Exception as e:
-        logger.error(f"Failed to update person {person_id}: {e}")
-        return {'success': False, 'message': str(e)}
+        logger.error(f"❌ Failed to update person {person_id}: {e}", exc_info=True)
+        return 500, {
+            'success': False,
+            'message': str(e)
+        }
 
 
 @upload_router.patch('/loci/{locus_id}/')
@@ -380,26 +479,144 @@ def delete_upload(request, upload_id: int):
         # Get the upload record
         upload = get_object_or_404(UploadedFile, id=upload_id)
 
-        # Get file path before deletion
-        file_path = upload.file.path if upload.file else None
+        # Log file name (works with both S3 and local)
+        file_name = upload.file.name if upload.file else "No file"
+        logger.info(f"Deleting upload ID {upload_id}: {file_name}")
 
+        # Delete the file first (works with both S3 and local)
+        if upload.file:
+            upload.file.delete(save=False)
+            logger.info(f"Deleted file: {file_name}")
+
+        # Delete the database record
         upload.delete()
-
-        # Delete physical file from disk
-        if file_path and os.path.exists(file_path):
-            os.remove(file_path)
-            logger.info(f"Deleted file: {file_path}")
 
         logger.info(f"Successfully deleted upload ID {upload_id}")
 
         return 200, {
             'success': True,
-            'message': f'Record deleted successfully'
+            'message': 'Record deleted successfully'
         }
 
+    except UploadedFile.DoesNotExist:
+        logger.warning(f"Upload {upload_id} not found")
+        return 404, {
+            'success': False,
+            'message': 'Record not found'
+        }
     except Exception as e:
         logger.error(f"Failed to delete upload {upload_id}: {e}", exc_info=True)
         return 404, {
             'success': False,
             'message': 'Failed to delete record'
+        }
+
+
+def validate_allele_format(allele: str) -> tuple[bool, str]:
+    """
+    Validate allele format
+
+    Valid formats:
+    - Integer: "12", "11"
+    - Decimal: "12.1", "12.11", "11.2"
+
+    Returns:
+        (is_valid, error_message)
+    """
+    if not allele or not allele.strip():
+        return False, "Allele cannot be empty"
+
+    allele = allele.strip()
+
+    # Pattern: digits, optional decimal point with digits
+    # Examples: 12, 12.1, 12.11, 8
+    pattern = r'^\d+(\.\d+)?$'
+
+    if not re.match(pattern, allele):
+        return False, f"Invalid allele format: '{allele}'. Must be numeric (e.g., 12, 12.1, 12.11)"
+
+    return True, ""
+
+
+@upload_router.post('/persons/{person_id}/loci/', response={201: dict, 400: dict})
+def create_locus(request, person_id: int, data: CreateLocusRequest):
+    """Create a new locus for a person"""
+    try:
+        person = get_object_or_404(Person, id=person_id)
+
+        # ✅ Validate allele_1 format
+        is_valid, error = validate_allele_format(data.allele_1)
+        if not is_valid:
+            return 400, {
+                'success': False,
+                'message': f'Allele 1: {error}'
+            }
+
+        # ✅ Validate allele_2 format
+        is_valid, error = validate_allele_format(data.allele_2)
+        if not is_valid:
+            return 400, {
+                'success': False,
+                'message': f'Allele 2: {error}'
+            }
+
+        # Create new locus
+        locus = DNALocus.objects.create(
+            person=person,
+            locus_name=data.locus_name,
+            allele_1=data.allele_1,
+            allele_2=data.allele_2
+        )
+
+        # Update loci_count
+        person.loci_count = person.loci.count()
+        person.save()
+
+        logger.info(f"✅ Created locus {data.locus_name} for person {person_id}")
+
+        return 201, {
+            'success': True,
+            'message': f'Created locus {data.locus_name}',
+            'data': {
+                'id': locus.id,
+                'locus_name': locus.locus_name,
+                'allele_1': locus.allele_1,
+                'allele_2': locus.allele_2
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Failed to create locus for person {person_id}: {e}")
+        return 400, {
+            'success': False,
+            'message': str(e)
+        }
+
+
+@upload_router.delete('/loci/{locus_id}/', response={200: dict, 404: dict})
+def delete_locus(request, locus_id: int):
+    """Delete a locus"""
+    try:
+        locus = get_object_or_404(DNALocus, id=locus_id)
+        person = locus.person
+        locus_name = locus.locus_name
+
+        locus.delete()
+
+        # Update loci_count
+        person.loci_count = person.loci.count()
+        person.save()
+
+        logger.info(f"✅ Deleted locus {locus_name} (ID: {locus_id})")
+
+        return 200, {
+            'success': True,
+            'message': f'Deleted locus {locus_name}'
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Failed to delete locus {locus_id}: {e}")
+        return 404, {
+            'success': False,
+            'message': str(e)
         }

@@ -55,18 +55,33 @@
 
         <ng-container matColumnDef="role">
           <th mat-header-cell *matHeaderCellDef>Role</th>
-          <td mat-cell *matCellDef="let element" (click)="$event.stopPropagation()">{{ element.role }}</td>
+          <td mat-cell *matCellDef="let element" (click)="$event.stopPropagation()">
+            <!-- Dropdown selector -->
+            <mat-form-field appearance="fill"
+                            subscriptSizing="dynamic"
+                            (click)="$event.stopPropagation()"
+                            class="role-select">
+              <mat-select [formControl]="$any(formService.getRowForm(element).get('role'))">
+                <mat-option value="father" class="select-option">
+                  <mat-icon class="select-option-icon">man</mat-icon>
+                  Father
+                </mat-option>
+                <mat-option value="mother" class="select-option">
+                  <mat-icon class="select-option-icon">woman</mat-icon>
+                  Mother
+                </mat-option>
+                <mat-option value="child" class="select-option">
+                  <mat-icon class="select-option-icon">child_care</mat-icon>
+                  Child
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+          </td>
         </ng-container>
 
         <ng-container matColumnDef="loci_count">
           <th mat-header-cell *matHeaderCellDef>Locus Count</th>
           <td mat-cell *matCellDef="let element" (click)="$event.stopPropagation()">{{ element.loci_count }}</td>
-        </ng-container>
-
-        <ng-container matColumnDef="overall_confidence">
-          <th mat-header-cell *matHeaderCellDef>Confidence</th>
-          <td mat-cell *matCellDef="let element" (click)="$event.stopPropagation()">{{ element.overall_confidence }}
-          </td>
         </ng-container>
 
         <ng-container matColumnDef="uploaded_at">
@@ -86,12 +101,12 @@
           </th>
           <td mat-cell *matCellDef="let element" (click)="$event.stopPropagation()">
             @if (element.relatedPersonName && element.relatedPersonId) {
-              <button mat-button
-                      (click)="filterByPerson(element.relatedPersonId, element.relatedPersonRole)">
-                {{ element.relatedPersonName }}
-              </button>
+              <span (click)="filterByPerson(element.relatedPersonId, element.relatedPersonRole)"
+                    class="person-link">
+                  {{ element.relatedPersonName }}
+              </span>
             } @else {
-              <span class="no-related">-</span>
+              <span>-</span>
             }
           </td>
         </ng-container>
@@ -104,8 +119,8 @@
             </div>
           </th>
           <td mat-cell *matCellDef="let element" (click)="$event.stopPropagation()">
-            <a [href]="store.getFileUrl(element.file)" target="_blank" class="file-link">
-              {{ element.file }}
+            <a [href]="element.file" target="_blank" class="file-link">
+              file.pdf
             </a>
           </td>
         </ng-container>
@@ -143,28 +158,68 @@
           </td>
         </ng-container>
 
-
         <ng-container matColumnDef="expandedDetail">
           <td mat-cell *matCellDef="let element" [attr.colspan]="columnsToDisplay.length">
             <div class="detail-wrapper" [class.expanded]="isExpanded(element)">
               <div class="detail-content">
                 <div class="loci-section form-field-wrapper">
-                  @for (locus of element.loci; track locus.id; let idx = $index) {
-                    <mat-form-field class="locus-field"
-                                    appearance="fill"
-                                    (click)="$event.stopPropagation()"
-                                    subscriptSizing="dynamic">
-                      <mat-label>{{ locus.locus_name }}</mat-label>
-                      <input matInput
-                             [formControl]="$any(formService.getLocusFormGroup(element, idx).get('alleles'))">
-                      <!-- ⭐ Show validation error -->
-                      <mat-error>
-                        @if (formService.getLocusFormGroup(element, idx).get('alleles')?.hasError('required')) {
-                          Alleles are required
-                        }
-                      </mat-error>
 
-                    </mat-form-field>
+                  <!-- ✅ Existing loci -->
+                  @for (locus of element.loci; track $index; let idx = $index) {
+                    <div class="locus-item">
+                      <mat-form-field class="locus-field"
+                                      appearance="fill"
+                                      (click)="$event.stopPropagation()"
+                                      subscriptSizing="dynamic">
+                        <mat-label>{{ locus.locus_name }}</mat-label>
+                        <input matInput
+                               [formControl]="$any(formService.getLocusFormGroup(element, idx).get('alleles'))">
+                        <mat-error>
+                          @if (formService.getLocusFormGroup(element, idx).get('alleles')?.hasError('required')) {
+                            Alleles are required
+                          }
+                        </mat-error>
+                      </mat-form-field>
+
+                      <button mat-icon-button
+                              (click)="removeLocus(element, idx); $event.stopPropagation()"
+                              [matTooltip]="'Remove ' + locus.locus_name">
+                        <mat-icon class="remove-locus-icon">delete_sweep</mat-icon>
+                      </button>
+                    </div>
+                  }
+
+                  <!-- ✅ Inline add section -->
+                  @if (isAddingLocus(element)) {
+                    <div class="locus-item adding">
+                      <mat-form-field class="locus-field"
+                                      appearance="fill"
+                                      (click)="$event.stopPropagation()"
+                                      subscriptSizing="dynamic">
+                        <mat-label>Locus</mat-label>
+                        <mat-select [(ngModel)]="selectedLocusName"
+                                    (selectionChange)="onLocusSelected(element, $event.value)">
+                          @for (locusName of getAvailableLoci(element); track locusName) {
+                            <mat-option [value]="locusName">{{ locusName }}</mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+
+                      <button mat-icon-button
+                              (click)="cancelAddLocus(element); $event.stopPropagation()"
+                              matTooltip="Cancel">
+                        <mat-icon>close</mat-icon>
+                      </button>
+                    </div>
+                  }
+
+                  <!-- ✅ Add locus button -->
+                  @if (!isAddingLocus(element)) {
+                    <button matMiniFab
+                            (click)="startAddingLocus(element); $event.stopPropagation()"
+                            class="add-locus-button">
+                      <mat-icon>add</mat-icon>
+                    </button>
                   }
                 </div>
               </div>

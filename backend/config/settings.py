@@ -53,6 +53,8 @@ INSTALLED_APPS = [
     'storages',
     'corsheaders',
     'dna',
+
+    'django_cleanup.apps.CleanupConfig'  # Must be last!
 ]
 
 MIDDLEWARE = [
@@ -140,18 +142,53 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 USE_S3 = os.environ.get('USE_S3', 'False') == 'True'
 
 if USE_S3:
-    # AWS Settings
+    # AWS Credentials
     AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
     AWS_STORAGE_BUCKET_NAME = os.environ.get('AWS_STORAGE_BUCKET_NAME')
     AWS_S3_REGION_NAME = os.environ.get('AWS_S3_REGION_NAME')
-    AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
 
-    # S3 Storage Settings
-    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
-    MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/'
+    # ✅ Top-level AWS settings (for django-storages compatibility)
+    AWS_QUERYSTRING_AUTH = True  # Generate signed URLs
+    AWS_QUERYSTRING_EXPIRE = 3600  # Valid for 1 hour
+    AWS_S3_SIGNATURE_VERSION = 's3v4'  # Modern signature
+    AWS_S3_FILE_OVERWRITE = False  # Don't overwrite same filename
+
+    # Django 5.1 Storage Configuration
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3.S3Storage",
+            "OPTIONS": {
+                "access_key": AWS_ACCESS_KEY_ID,
+                "secret_key": AWS_SECRET_ACCESS_KEY,
+                "bucket_name": AWS_STORAGE_BUCKET_NAME,
+                "region_name": AWS_S3_REGION_NAME,
+                "querystring_auth": True,  # Generate signed URLs
+                "querystring_expire": 3600,  # 1 hour expiry
+                "signature_version": "s3v4",  # Modern AWS signature
+                "file_overwrite": False,  # Keep file versions
+            },
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
+
+    # Placeholder MEDIA_URL (not actually used - boto3 generates URLs)
+    MEDIA_URL = '/media-not-used/'
+    MEDIA_ROOT = None
+
 else:
-    # Local Storage
+    # Local Storage (Development)
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
+
     MEDIA_URL = '/media/'
     MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 

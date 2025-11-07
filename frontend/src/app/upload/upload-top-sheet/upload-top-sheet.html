@@ -108,7 +108,7 @@
           @for (match of fileWithStatus.response!.top_matches!.slice(0, 3); track match.person_id) {
             <mat-list-item [disableRipple]="true">
               <mat-icon matListItemIcon>person</mat-icon>
-              <h4 matListItemTitle (click)="viewMatch(match)" [style]="{'cursor': 'pointer', 'color':'#004f4f'}">{{ match.name }}</h4>
+              <h4 matListItemTitle (click)="viewMatch(match)" class="person-link-upload">{{ match.name }}</h4>
 
               <p matListItemLine>
                 {{ match.role }} {{ match.matching_loci }}/{{ match.total_loci }} loci

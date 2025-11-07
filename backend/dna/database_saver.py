@@ -4,10 +4,13 @@ Handles: Parent (father/mother), Child, and all DNA Loci
 Supports: Parent+Child, Parent-only, Child-only uploads
 """
 import logging
-
-from typing import Dict, Any, List, Optional
+import os
+from typing import Dict, Any, List
 
 from django.db import transaction
+from django.core.files import File
+from django.core.files.storage import default_storage
+from django.conf import settings
 
 from dna.models import UploadedFile, Person, DNALocus
 
@@ -103,54 +106,9 @@ def check_duplicate_by_alleles(extraction_result: Dict[str, Any]) -> Dict[str, A
     return {'is_duplicate': False, 'existing_upload_id': None}
 
 
-def _calculate_overall_confidence(loci_data: List[Dict]) -> float:
-    """
-    Calculate overall confidence score for a person
-    Average of all allele confidences across all loci
-
-    🔧 FIX: Handles None confidence values properly with safety wrapper
-
-    Args:
-        loci_data: List of locus data dicts
-
-    Returns:
-        Average confidence (0.0 - 1.0)
-    """
-    total_confidence = 0.0
-    count = 0
-
-    for locus in loci_data:
-        locus_name = locus.get('locus_name')
-
-        # Skip gender markers
-        if locus_name and locus_name.lower() in GENDER_MARKERS:
-            continue
-
-        # Skip empty loci
-        if locus.get('allele_1') is None or locus.get('allele_2') is None:
-            continue
-
-        # Get confidence scores safely
-        allele_1_confidence = _safe_confidence(locus.get('allele_1_confidence'))
-        allele_2_confidence = _safe_confidence(locus.get('allele_2_confidence'))
-
-        total_confidence += allele_1_confidence
-        count += 1
-
-        total_confidence += allele_2_confidence
-        count += 1
-
-    if count == 0:
-        return 1.0  # Default to 100% if no confidence data
-
-    return total_confidence / count
-
-
 def _count_valid_loci(loci: List[Dict]) -> int:
     """
     Count only valid STR loci (exclude gender markers and empty loci)
-
-    🔧 FIX: Skips loci with null/empty alleles (normal for some labs)
 
     Args:
         loci: List of locus data dicts
@@ -166,7 +124,7 @@ def _count_valid_loci(loci: List[Dict]) -> int:
         if locus_name and locus_name.lower() in GENDER_MARKERS:
             continue
 
-        # Skip loci with empty alleles (FIX: not an error, just skip)
+        # Skip loci with empty alleles
         allele_1 = locus.get('allele_1')
         allele_2 = locus.get('allele_2')
 
@@ -188,11 +146,6 @@ def _save_person_loci(
 ) -> int:
     """
     Save loci for a person (parent or child)
-
-    🔧 FIXES:
-    - Auto-corrects common OCR errors (CSF1P0 → CSF1PO)
-    - Skips empty loci (not errors)
-    - Handles None confidence values
     """
     saved_count = 0
     skipped_loci = []
@@ -212,7 +165,7 @@ def _save_person_loci(
             logger.debug(f"Skipping gender marker: {locus_name} for {person.name}")
             continue
 
-        # 🔧 FIX: Auto-correct common OCR errors FIRST
+        # Auto-correct common OCR errors FIRST
         original_locus_name = locus_name
         locus_name = _fix_common_ocr_errors(locus_name)
 
@@ -237,7 +190,7 @@ def _save_person_loci(
         try:
             DNALocus.objects.create(
                 person=person,
-                locus_name=locus_name,  # Use corrected name
+                locus_name=locus_name,
                 allele_1=str(allele_1),
                 allele_2=str(allele_2),
             )
@@ -262,21 +215,22 @@ def _save_person_loci(
 def save_dna_extraction_to_database(
         extraction_result: Dict[str, Any],
         filename: str,
-        expected_role: Optional[str] = None
+        local_file_path: str,
 ) -> Dict[str, Any]:
     """
     Save DNA extraction result to database with validation
-    Supports: Parent+Child, Parent-only, Child-only uploads
+    Then upload to S3 if all validations pass
 
-    🔧 MAJOR FIXES:
-    - Empty loci are skipped (not errors)
-    - Confidence None values handled
-    - Labs that test 15-20 loci (not all 23) are now accepted
+    Workflow:
+    1. Validate data (duplicate check, confidence, loci count)
+    2. If validation passes → Upload to S3 → Save to database → Delete local file
+    3. If validation fails → Return errors (file NOT uploaded to S3)
 
     Args:
         extraction_result: Extraction result from AI
         filename: Original filename
-        expected_role: Expected role from user ('father', 'mother', or 'child'), or None for auto-detect
+        local_file_path: LOCAL path to the file for S3 upload
+        expected_role: Expected role from user ('father', 'mother', or 'child')
 
     Returns:
         Dict with success, errors
@@ -286,7 +240,7 @@ def save_dna_extraction_to_database(
     logger.info(f"Extraction result keys: {extraction_result.keys()}")
 
     try:
-        # === STEP 1: Duplicate Check (only for parent data) ===
+        # === STEP 1: Duplicate Check ===
         duplicate_check = check_duplicate_by_alleles(extraction_result)
 
         if duplicate_check['is_duplicate']:
@@ -314,7 +268,7 @@ def save_dna_extraction_to_database(
 
         logger.info(f"Data structure: has_parent={has_parent}, has_child={has_child}")
 
-        # ⭐ Check if we have ANY data
+        # Check if we have ANY data
         if not has_parent and not has_child:
             logger.error(f"No DNA data in {filename}")
             return {
@@ -322,13 +276,13 @@ def save_dna_extraction_to_database(
                 'errors': ["No DNA data found in file"],
             }
 
-        # === STEP 4: Validate Loci Counts (🔧 FIX: uses new count function) ===
+        # === STEP 4: Validate Loci Counts ===
         valid_parent_count = _count_valid_loci(parent_loci) if has_parent else 0
         valid_child_count = _count_valid_loci(child_loci) if has_child else 0
 
         logger.info(f"Valid loci counts: parent={valid_parent_count}, child={valid_child_count}")
 
-        # ⭐ Minimum loci validation - REDUCED to 10 (was rejecting valid files)
+        # Minimum loci validation
         if has_parent and valid_parent_count < 10:
             logger.error(f"Only {valid_parent_count} parent loci in {filename}")
             return {
@@ -343,24 +297,7 @@ def save_dna_extraction_to_database(
                 'errors': [f"Insufficient child data ({valid_child_count} loci). Need at least 10 loci."],
             }
 
-        # === STEP 5: Calculate Confidence Scores (🔧 FIX: handles None) ===
-        parent_confidence = _calculate_overall_confidence(parent_loci) if has_parent else 1.0
-        child_confidence = _calculate_overall_confidence(child_loci) if has_child else 1.0
-
-        # Overall confidence
-        if has_parent and has_child:
-            overall_confidence = (parent_confidence + child_confidence) / 2
-        elif has_parent:
-            overall_confidence = parent_confidence
-        else:  # has_child only
-            overall_confidence = child_confidence
-
-        logger.info(
-            f"Confidence scores: parent={parent_confidence:.2%}, "
-            f"child={child_confidence:.2%}, overall={overall_confidence:.2%}"
-        )
-
-        # === STEP 6: Check AI Confidence (🔧 FIX: handles None safely) ===
+        # === STEP 6: Check AI Confidence ===
         confidence_threshold = 0.8
 
         if has_parent:
@@ -441,13 +378,11 @@ def save_dna_extraction_to_database(
             parent_name = (parent_data.get('name') or '').strip() or 'Unknown'
             if parent_name == 'Unknown':
                 logger.warning(f"Parent name missing in file: {filename}")
-                # Not a critical error - use "Unknown"
 
         if has_child:
             child_name = (child_data.get('name') or '').strip() or 'Unknown'
             if child_name == 'Unknown':
                 logger.warning(f"Child name missing in file: {filename}")
-                # Not a critical error - use "Unknown"
 
         # === STOP HERE IF ERRORS ===
         if errors:
@@ -456,12 +391,35 @@ def save_dna_extraction_to_database(
                 'errors': errors,
             }
 
-        # === STEP 10: Save to Database ===
+        # === STEP 10: ALL VALIDATIONS PASSED - Now save everything ===
         with transaction.atomic():
-            # Create upload record
+
+            # ✅ FIRST: Upload to S3 (only if validation passed)
+            s3_file_path = None
+
+            if settings.USE_S3:
+                logger.info(f"📤 Uploading to S3: {filename}")
+                try:
+                    with open(local_file_path, 'rb') as local_file:
+                        django_file = File(local_file, name=filename)
+                        # Save to S3: bucket/uploads/filename
+                        s3_file_path = default_storage.save(f'uploads/{filename}', django_file)
+                        logger.info(f"✅ Uploaded to S3: {s3_file_path}")
+                except Exception as s3_error:
+                    logger.error(f"❌ S3 upload failed: {s3_error}")
+                    # S3 upload failed - abort transaction
+                    return {
+                        'success': False,
+                        'errors': ["Failed to upload file to storage"],
+                    }
+            else:
+                # Not using S3 - just reference local path
+                s3_file_path = f'uploads/{filename}'
+                logger.info(f"💾 Local storage mode - path: {s3_file_path}")
+
+            # ✅ SECOND: Create database records
             uploaded_file = UploadedFile.objects.create(
-                file=f"uploads/{filename}",
-                overall_confidence=overall_confidence
+                file=s3_file_path,  # S3 path or local reference
             )
 
             parent_person = None
@@ -469,7 +427,7 @@ def save_dna_extraction_to_database(
             child_person = None
             child_saved_count = 0
 
-            # ⭐ Save parent (if exists)
+            # Save parent (if exists)
             if has_parent:
                 if parent_role == 'unknown':
                     parent_role = 'father'
@@ -481,7 +439,6 @@ def save_dna_extraction_to_database(
                     loci_count=0
                 )
 
-                # 🔧 FIX: Empty loci are skipped, not errors
                 parent_saved_count = _save_person_loci(
                     person=parent_person,
                     loci_data=parent_loci,
@@ -497,7 +454,7 @@ def save_dna_extraction_to_database(
                     f"with {parent_saved_count} STR loci"
                 )
 
-            # ⭐ Save child (if exists)
+            # Save child (if exists)
             if has_child:
                 child_person = Person.objects.create(
                     uploaded_file=uploaded_file,
@@ -506,7 +463,6 @@ def save_dna_extraction_to_database(
                     loci_count=0
                 )
 
-                # 🔧 FIX: Empty loci are skipped, not errors
                 child_saved_count = _save_person_loci(
                     person=child_person,
                     loci_data=child_loci,
@@ -522,19 +478,21 @@ def save_dna_extraction_to_database(
                     f"with {child_saved_count} STR loci"
                 )
 
-            # ⭐ CHECK FOR ERRORS AFTER SAVE ATTEMPTS
+            # Check for errors during loci save
             if errors:
-                # Transaction will be rolled back automatically
                 logger.error(f"Errors found during loci save for {filename}: {errors}")
+                # Transaction will rollback automatically
                 return {
                     'success': False,
                     'errors': errors,
                 }
 
-            # Update upload record
             uploaded_file.save()
 
-            # ⭐ Build success message
+            # ✅ THIRD: Everything saved successfully - clean up temp file
+            _cleanup_temp_file(local_file_path)
+
+            # Build success message
             saved_info = []
             if has_parent:
                 saved_info.append(f"Parent {parent_person.id} ({parent_saved_count} loci)")
@@ -542,10 +500,9 @@ def save_dna_extraction_to_database(
                 saved_info.append(f"Child {child_person.id} ({child_saved_count} loci)")
 
             logger.info(
-                f"Successfully saved {filename}: "
+                f"✅ Successfully saved {filename}: "
                 f"Upload ID {uploaded_file.id}, "
-                f"Uploaded at: {uploaded_file.uploaded_at}, "
-                f"Overall confidence: {overall_confidence:.2%}, "
+                f"S3 path: {s3_file_path}, "
                 f"{', '.join(saved_info)}"
             )
 
@@ -564,17 +521,19 @@ def save_dna_extraction_to_database(
         }
 
 
+def _cleanup_temp_file(file_path: str):
+    """Helper to safely delete temp file"""
+    if file_path and os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+            logger.info(f"🗑️ Cleaned up temporary file: {file_path}")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to clean up temp file {file_path}: {e}")
+
+
 def _safe_min(val1: Any, val2: Any, default: float = 1.0) -> float:
     """
     Safely get minimum of two values, handling None
-
-    Args:
-        val1: First value
-        val2: Second value
-        default: Default if both are None
-
-    Returns:
-        Minimum value or default
     """
     if val1 is None and val2 is None:
         return default
@@ -592,13 +551,6 @@ def _safe_min(val1: Any, val2: Any, default: float = 1.0) -> float:
 def _safe_confidence(value: Any, default: float = 1.0) -> float:
     """
     Safely convert confidence value to float
-
-    Args:
-        value: Confidence value (may be None, str, int, float)
-        default: Default value if invalid
-
-    Returns:
-        Float confidence value
     """
     if value is None:
         return default
@@ -614,12 +566,6 @@ def _safe_confidence(value: Any, default: float = 1.0) -> float:
 def _fix_common_ocr_errors(locus_name: str) -> str:
     """
     Fix common OCR errors in locus names
-
-    Args:
-        locus_name: Original locus name from extraction
-
-    Returns:
-        Corrected locus name
     """
     if not locus_name:
         return locus_name

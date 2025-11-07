@@ -25,5 +25,5 @@ urlpatterns = [
     path('api/', api.urls),
 ]
 
-if settings.DEBUG:
+if not settings.USE_S3 and settings.MEDIA_URL:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

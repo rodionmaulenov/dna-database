@@ -8,6 +8,7 @@ backend/.env
 .env.*.local
 *.env
 !.env.example
+backend/develop.env.docker
 
 # ==========================================
 # Python / Django (Backend)

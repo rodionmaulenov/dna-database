@@ -1,15 +1,15 @@
-import { computed } from '@angular/core';
-import { patchState, signalStore, withComputed, withMethods, withState } from '@ngrx/signals';
-import { rxMethod } from '@ngrx/signals/rxjs-interop';
-import { pipe, switchMap, tap, from, concatMap } from 'rxjs';
-import { tapResponse } from '@ngrx/operators';
-import { inject } from '@angular/core';
-import { DNADataListResponse, initialState, TableRowData } from './models';
-import { NotificationService } from '../../shared/services/notification.service';
+import {computed} from '@angular/core';
+import {patchState, signalStore, withComputed, withMethods, withState} from '@ngrx/signals';
+import {rxMethod} from '@ngrx/signals/rxjs-interop';
+import {pipe, switchMap, tap, from, concatMap} from 'rxjs';
+import {tapResponse} from '@ngrx/operators';
+import {inject} from '@angular/core';
+import {DNADataListResponse, initialState, TableRowData} from './models';
+import {NotificationService} from '../../shared/services/notification.service';
 import {DnaTableHttpService} from './dna-table.service';
 
 export const DnaTableStore = signalStore(
-  { providedIn: 'root' },
+  {providedIn: 'root'},
 
   withState(initialState),
 
@@ -50,7 +50,6 @@ export const DnaTableStore = signalStore(
           rows.push({
             id: item.id,
             personId: item.parent.id,
-            overall_confidence: item.overall_confidence,
             uploaded_at: item.uploaded_at,
             name: item.parent.name,
             role: item.parent.role,
@@ -67,7 +66,6 @@ export const DnaTableStore = signalStore(
           rows.push({
             id: item.id,
             personId: item.child.id,
-            overall_confidence: item.overall_confidence,
             uploaded_at: item.uploaded_at,
             name: item.child.name,
             role: item.child.role,
@@ -109,8 +107,8 @@ export const DnaTableStore = signalStore(
       // Load table data using rxMethod + HTTP service
       loadTableData: rxMethod<{ personId?: number; page?: number }>(
         pipe(
-          tap(() => patchState(store, { loading: true, expandedRowId: null })),
-          switchMap(({ personId, page = 1 }) => {
+          tap(() => patchState(store, {loading: true, expandedRowId: null})),
+          switchMap(({personId, page = 1}) => {
             return httpService.loadTableData(personId, page, store.pageSize()).pipe(
               tapResponse({
                 next: (response) => {
@@ -141,11 +139,11 @@ export const DnaTableStore = signalStore(
       // Filter by person
       filterByPerson: rxMethod<{ personId: number; personRole: string }>(
         pipe(
-          tap(({ personRole }) => {
+          tap(({personRole}) => {
             const targetFilter = personRole === 'child' ? 'child' : 'parent';
-            patchState(store, { roleFilter: targetFilter, loading: true });
+            patchState(store, {roleFilter: targetFilter, loading: true});
           }),
-          switchMap(({ personId }) => {
+          switchMap(({personId}) => {
             return httpService.loadTableData(personId, 1, store.pageSize()).pipe(
               tapResponse({
                 next: (response) => {
@@ -166,7 +164,7 @@ export const DnaTableStore = signalStore(
                   }
                 },
                 error: () => {
-                  patchState(store, { loading: false });
+                  patchState(store, {loading: false});
                   notificationService.error('Failed to filter data');
                 }
               })
@@ -178,7 +176,7 @@ export const DnaTableStore = signalStore(
       // Clear person filter
       clearPersonFilter: rxMethod<void>(
         pipe(
-          tap(() => patchState(store, { loading: true, expandedRowId: null })),
+          tap(() => patchState(store, {loading: true, expandedRowId: null})),
           switchMap(() => {
             return httpService.loadTableData(undefined, 1, store.pageSize()).pipe(
               tapResponse({
@@ -196,7 +194,7 @@ export const DnaTableStore = signalStore(
                   notificationService.info('Filter cleared');
                 },
                 error: () => {
-                  patchState(store, { loading: false });
+                  patchState(store, {loading: false});
                   notificationService.error('Failed to clear filter');
                 }
               })
@@ -205,91 +203,209 @@ export const DnaTableStore = signalStore(
         )
       ),
 
-      // Update row (name + loci)
+      // ✅ Method 1: Delete loci
+      deleteLoci: rxMethod<{ row: TableRowData; locusIds: number[] }>(
+        pipe(
+          switchMap(({ row, locusIds }) => {
+            return from(locusIds).pipe(
+              concatMap(id => httpService.deleteLocus(id)),
+              tapResponse({
+                next: () => {
+                  notificationService.success(`Deleted ${locusIds.length} loci`);
+                },
+                error: (error: any) => {
+                  notificationService.error('Failed to delete loci');
+                }
+              })
+            );
+          })
+        )
+      ),
+
+      // ✅ Method 2: Create new loci
+      createLoci: rxMethod<{
+        row: TableRowData;
+        newLoci: Array<{ locus_name: string; allele_1: string; allele_2: string }>;
+      }>(
+        pipe(
+          switchMap(({ row, newLoci }) => {
+            return from(newLoci).pipe(
+              concatMap(locus =>
+                httpService.createLocus(row.personId, locus).pipe(
+                  tap((response: any) => {
+                    // Update state with new locus ID
+                    patchState(store, (state) => {
+                      const rows = [...state.tableData];
+                      const rowIndex = rows.findIndex(r => r.personId === row.personId);
+                      if (rowIndex !== -1) {
+                        const loci = rows[rowIndex].loci.map(l => {
+                          if (l.locus_name === locus.locus_name && l.id === null) {
+                            return { ...l, id: response.data.id };
+                          }
+                          return l;
+                        });
+                        rows[rowIndex] = { ...rows[rowIndex], loci };
+                      }
+                      return { tableData: rows };
+                    });
+                  })
+                )
+              ),
+              tapResponse({
+                next: () => {
+                  notificationService.success(`Created ${newLoci.length} new loci`);
+                },
+                error: () => {
+                  notificationService.error('Failed to create loci');
+                }
+              })
+            );
+          })
+        )
+      ),
+
+      // ✅ Method 3: Update existing loci
+      updateLoci: rxMethod<{
+        row: TableRowData;
+        updates: Array<{ id: number; allele_1: string; allele_2: string }>;
+      }>(
+        pipe(
+          switchMap(({ row, updates }) => {
+            return from(updates).pipe(
+              concatMap(update =>
+                httpService.updateLocus(update.id, {
+                  allele_1: update.allele_1,
+                  allele_2: update.allele_2
+                })
+              ),
+              tapResponse({
+                next: () => {
+                  notificationService.success(`Updated ${updates.length} loci`);
+                },
+                error: () => {
+                  notificationService.error('Failed to update loci');
+                }
+              })
+            );
+          })
+        )
+      ),
+
+      // ✅ Method 4: Update person info
+      updatePersonInfo: rxMethod<{
+        row: TableRowData;
+        name?: string;
+        role?: string;
+      }>(
+        pipe(
+          switchMap(({ row, name, role }) => {
+            const updates: any = {};
+            if (name) updates.name = name;
+            if (role) updates.role = role;
+
+            return httpService.updatePerson(row.personId, updates).pipe(
+              tap(() => {
+                patchState(store, (state) => {
+                  const rows = [...state.tableData];
+                  const rowIndex = rows.findIndex(r => r.personId === row.personId);
+                  if (rowIndex !== -1) {
+                    rows[rowIndex] = { ...rows[rowIndex], ...updates };
+                  }
+                  return { tableData: rows };
+                });
+              }),
+              tapResponse({
+                next: () => {
+                  const fields = Object.keys(updates).join(', ');
+                  notificationService.success(`Updated: ${fields}`);
+                },
+                error: () => {
+                  notificationService.error('Failed to update person info');
+                }
+              })
+            );
+          })
+        )
+      ),
+
+      // ✅ Main method: Orchestrate all updates
       updateRow: rxMethod<{
         row: TableRowData;
         nameUpdate?: string;
-        lociUpdates: Array<{ id: number; allele_1: string; allele_2: string }>;
+        roleUpdate?: string;
+        lociUpdates: Array<{
+          id: number | null;
+          locus_name?: string;
+          allele_1: string;
+          allele_2: string;
+        }>;
+        deletedLociIds?: number[];
       }>(
         pipe(
           tap(({ row }) => {
             patchState(store, { updatingRowId: row.personId });
           }),
-          switchMap(({ row, nameUpdate, lociUpdates }) => {
-            const updates: Array<{ type: 'name' | 'locus'; data: any }> = [];
+          switchMap(({ row, nameUpdate, roleUpdate, lociUpdates, deletedLociIds = [] }) => {
+            const operations = [];
 
-            if (nameUpdate) {
-              updates.push({
-                type: 'name',
-                data: { id: row.personId, value: nameUpdate }
-              });
+            // 1. Delete loci
+            if (deletedLociIds.length > 0) {
+              operations.push(
+                from(deletedLociIds).pipe(
+                  concatMap(id => httpService.deleteLocus(id))
+                )
+              );
             }
 
-            lociUpdates.forEach(({ id, allele_1, allele_2 }) => {
-              updates.push({
-                type: 'locus',
-                data: { id, allele_1, allele_2 }
-              });
-            });
+            // 2. Update person info
+            if (nameUpdate || roleUpdate) {
+              const updates: any = {};
+              if (nameUpdate) updates.name = nameUpdate;
+              if (roleUpdate) updates.role = roleUpdate;
+              operations.push(httpService.updatePerson(row.personId, updates));
+            }
 
-            return from(updates).pipe(
-              concatMap((update) => {
-                if (update.type === 'name') {
-                  return httpService.updatePerson(update.data.id, { name: update.data.value }).pipe(
-                    tap(() => {
-                      patchState(store, (state) => {
-                        const rows = [...state.tableData];
-                        const rowIndex = rows.findIndex(r => r.personId === row.personId);
-                        if (rowIndex !== -1) {
-                          rows[rowIndex] = { ...rows[rowIndex], name: update.data.value };
-                        }
-                        return { tableData: rows };
-                      });
+            // 3. Create new loci
+            const newLoci = lociUpdates.filter(l => l.id === null);
+            if (newLoci.length > 0) {
+              operations.push(
+                from(newLoci).pipe(
+                  concatMap(locus =>
+                    httpService.createLocus(row.personId, {
+                      locus_name: locus.locus_name!,
+                      allele_1: locus.allele_1,
+                      allele_2: locus.allele_2
                     })
-                  );
-                } else {
-                  return httpService.updateLocus(update.data.id, {
-                    allele_1: update.data.allele_1,
-                    allele_2: update.data.allele_2
-                  }).pipe(
-                    tap(() => {
-                      patchState(store, (state) => {
-                        const rows = [...state.tableData];
-                        const rowIndex = rows.findIndex(r => r.personId === row.personId);
-                        if (rowIndex !== -1) {
-                          const loci = [...rows[rowIndex].loci];
-                          const locusIndex = loci.findIndex(l => l.id === update.data.id);
-                          if (locusIndex !== -1) {
-                            loci[locusIndex] = {
-                              ...loci[locusIndex],
-                              allele_1: update.data.allele_1,
-                              allele_2: update.data.allele_2
-                            };
-                            rows[rowIndex] = { ...rows[rowIndex], loci };
-                          }
-                        }
-                        return { tableData: rows };
-                      });
+                  )
+                )
+              );
+            }
+
+            // 4. Update existing loci
+            const existingLoci = lociUpdates.filter(l => l.id !== null);
+            if (existingLoci.length > 0) {
+              operations.push(
+                from(existingLoci).pipe(
+                  concatMap(locus =>
+                    httpService.updateLocus(locus.id!, {
+                      allele_1: locus.allele_1,
+                      allele_2: locus.allele_2
                     })
-                  );
-                }
-              }),
+                  )
+                )
+              );
+            }
+
+            return from(operations).pipe(
+              concatMap(op => op),
               tapResponse({
                 next: () => {
                   patchState(store, { updatingRowId: null });
-
-                  const updatedFields = [];
-                  if (nameUpdate) updatedFields.push('name');
-                  if (lociUpdates.length > 0) updatedFields.push(`${lociUpdates.length} loci`);
-
-                  if (updatedFields.length > 0) {
-                    notificationService.success(`Updated: ${updatedFields.join(', ')}`);
-                  }
+                  notificationService.success('Updated successfully');
                 },
                 error: (error: any) => {
                   patchState(store, { updatingRowId: null });
-                  const errorMsg = error?.error?.message || error?.message || 'Failed to save changes';
-                  notificationService.error(`Update failed: ${errorMsg}`);
+                  notificationService.error('Update failed');
                 }
               })
             );
@@ -308,14 +424,14 @@ export const DnaTableStore = signalStore(
       // Change page
       changePage: rxMethod<{ page: number; pageSize?: number }>(
         pipe(
-          tap(({ pageSize }) => {
-            patchState(store, { expandedRowId: null, loading: true });
+          tap(({pageSize}) => {
+            patchState(store, {expandedRowId: null, loading: true});
 
             if (pageSize && pageSize !== store.pageSize()) {
-              patchState(store, { pageSize });
+              patchState(store, {pageSize});
             }
           }),
-          switchMap(({ page, pageSize: newPageSize }) => {
+          switchMap(({page, pageSize: newPageSize}) => {
             const personId = store.currentPersonFilter();
             return httpService.loadTableData(personId || undefined, page, newPageSize || store.pageSize()).pipe(
               tapResponse({
@@ -330,7 +446,7 @@ export const DnaTableStore = signalStore(
                   });
                 },
                 error: () => {
-                  patchState(store, { loading: false });
+                  patchState(store, {loading: false});
                   notificationService.error('Failed to load page');
                 }
               })
@@ -344,11 +460,6 @@ export const DnaTableStore = signalStore(
         return store.updatingRowId() === personId;
       },
 
-      // Get file URL
-      getFileUrl(filename: string): string {
-        return httpService.getFileUrl(filename);
-      },
-
       // Get related person label
       getRelatedPersonLabel(): string {
         return store.roleFilter() === 'parent' ? 'Child' : 'Parent';
@@ -358,7 +469,7 @@ export const DnaTableStore = signalStore(
       deleteRecord: rxMethod<number>(
         pipe(
           switchMap((uploadId) => {
-            patchState(store, { loading: true });
+            patchState(store, {loading: true});
 
             return httpService.deleteUpload(uploadId).pipe(
               tapResponse({
@@ -379,7 +490,7 @@ export const DnaTableStore = signalStore(
                   notificationService.success('Record deleted successfully');
                 },
                 error: (error: any) => {
-                  patchState(store, { loading: false });
+                  patchState(store, {loading: false});
                   const errorMsg = error?.error?.message || 'Failed to delete record';
                   notificationService.error(`Delete failed: ${errorMsg}`);
                 }
@@ -388,6 +499,48 @@ export const DnaTableStore = signalStore(
           })
         )
       ),
+
+      addLocusToRow(personId: number, locusName: string) {
+        patchState(store, (state) => {
+          const rows = [...state.tableData];
+          const rowIndex = rows.findIndex(r => r.personId === personId);
+
+          if (rowIndex !== -1) {
+            const newLocus = {
+              id: null as any,
+              locus_name: locusName,
+              allele_1: '',
+              allele_2: ''
+            };
+
+            rows[rowIndex] = {
+              ...rows[rowIndex],
+              loci: [...rows[rowIndex].loci, newLocus]
+            };
+          }
+
+          return {tableData: rows};
+        });
+      },
+
+      removeLocusFromRow(personId: number, index: number) {
+        patchState(store, (state) => {
+          const rows = [...state.tableData];
+          const rowIndex = rows.findIndex(r => r.personId === personId);
+
+          if (rowIndex !== -1) {
+            const loci = [...rows[rowIndex].loci];
+            loci.splice(index, 1);
+
+            rows[rowIndex] = {
+              ...rows[rowIndex],
+              loci
+            };
+          }
+
+          return {tableData: rows};
+        });
+      },
     };
   })
 );

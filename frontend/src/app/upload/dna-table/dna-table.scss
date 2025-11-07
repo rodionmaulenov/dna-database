@@ -2,13 +2,10 @@
   display: block;
   width: 100%;
 
-  ::ng-deep .form-field-wrapper .mdc-text-field {
+  ::ng-deep :is(.name-input, .role-select) .mdc-text-field {
     padding: 0 16px 0 0;
   }
 
-  .mat-mdc-button:has(.material-icons,mat-icon,[matButtonIcon]) {
-    padding: 0 16px 0 0;
-  }
 
   ::ng-deep .mat-mdc-form-field-error-wrapper {
     padding: 0;
@@ -61,6 +58,7 @@
   border-radius: 16px 16px 0 0;
   overflow: auto;
 
+
   // ⭐ Tablet (landscape and portrait)
   @media (max-width: 1024px) {
     height: 70vh;
@@ -98,7 +96,7 @@
 table {
   width: 100%;
   flex: 1;
-  min-width: 1300px;
+  min-width: 1500px;
 }
 
 mat-paginator {
@@ -153,25 +151,6 @@ tr.detail-row {
   min-height: 0;
 }
 
-.loci-section {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 50px;
-
-  .locus-field {
-    width: 130px;
-  }
-
-  mat-form-field {
-    margin-right: 8px;
-  }
-
-  button {
-    vertical-align: middle;
-  }
-}
-
 td[matColumnDef="name"] {
   button {
     opacity: 0;
@@ -185,6 +164,22 @@ td[matColumnDef="name"] {
 
 .name-input {
   width: 100%;
+}
+
+.role-select{
+  width: 140px;
+}
+
+.select-option {
+  font-size: 14px;
+}
+
+.select-option-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
+  vertical-align: middle;
 }
 
 .icon-alignment {
@@ -212,3 +207,65 @@ td[matColumnDef="name"] {
   width: 20px;
   height: 20px;
 }
+
+.person-link {
+  cursor: pointer;
+  color: #004f4f;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.person-link:hover {
+  text-decoration: underline;
+}
+
+.role-select{
+  width: 140px;
+}
+
+.select-option {
+  font-size: 14px;
+}
+
+.select-option-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.loci-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 30px;
+
+  .locus-item {
+    display: flex;
+    align-items: flex-start;
+
+    .locus-field {
+      width: 130px;
+    }
+
+    button {
+      display: flex;
+      justify-content: center;
+      margin-top: 8px;
+    }
+  }
+
+  .add-locus-button {
+    margin-bottom: 8px;
+    margin-left: 20px;
+  }
+
+  .remove-locus-icon{
+    font-size: 22px;
+    width: 22px;
+    height: 22px;
+  }
+}
+
+

@@ -73,7 +73,8 @@ def process_file_upload(file_path, filename):
         logger.info("Step 3: Saving to database")
         db_result = save_dna_extraction_to_database(
             extraction_result=extraction_result,
-            filename=filename
+            filename=filename,
+            local_file_path=file_path
         )
 
         if not db_result.get('success', False):

@@ -1,27 +1,12 @@
 from django.db import models
 
-from django.db.models.signals import post_delete
-from django.dispatch import receiver
 
 class UploadedFile(models.Model):
     file = models.FileField(upload_to='uploads/')
-    overall_confidence = models.FloatField(
-        default=1.0,
-        help_text="Average confidence score (0.0 - 1.0)"
-    )
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['-uploaded_at']
-
-# Signal to delete file from S3 when model instance is deleted
-@receiver(post_delete, sender=UploadedFile)
-def delete_file_on_model_delete(sender, instance, **kwargs):
-    """
-    Deletes file from S3 (or local storage) when UploadedFile is deleted.
-    """
-    if instance.file:
-        instance.file.delete(save=False)
 
 
 class Person(models.Model):

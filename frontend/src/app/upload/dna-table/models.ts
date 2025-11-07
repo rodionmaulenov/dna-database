@@ -3,7 +3,6 @@ import {LocusData, PersonData} from '../models';
 export interface DNADataResponse {
   id: number;
   file: string;
-  overall_confidence: number;
   uploaded_at: string;
   parent: PersonData | null;
   child: PersonData | null;
@@ -19,7 +18,6 @@ export interface DNADataListResponse {
 export interface TableRowData {
   id: number;
   personId: number;
-  overall_confidence: number;
   uploaded_at: string;
   name: string;
   role: string;
@@ -55,4 +53,27 @@ export const initialState: DnaTableState = {
   expandedRowId: null,
   updatingRowId: null,
 };
+
+export interface UpdatePersonData {
+  name?: string;
+  role?: string;
+}
+
+export interface UpdatePersonData {
+  name?: string;
+  role?: string;
+}
+
+export interface CreateLocusData {
+  locus_name: string;
+  allele_1: string;
+  allele_2: string;
+}
+
+export interface LociUpdate {
+  id: number | null;
+  locus_name?: string;
+  allele_1: string;
+  allele_2: string;
+}
 

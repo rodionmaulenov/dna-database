@@ -1,11 +1,5 @@
 import {Injectable, inject} from '@angular/core';
-import {
-  FormBuilder,
-  FormGroup,
-  FormArray,
-  Validators,
-
-} from '@angular/forms';
+import {FormBuilder, FormGroup, FormArray, Validators} from '@angular/forms';
 import {TableRowData} from './models';
 
 @Injectable({
@@ -24,19 +18,55 @@ export class DnaTableFormService {
 
   private createRowForm(row: TableRowData): FormGroup {
     return this.fb.group({
-      name: [row.name, [Validators.required, Validators.minLength(2)]], // ⭐ Name validation
+      name: [row.name, [Validators.required, Validators.minLength(2)]],
+      role: [row.role, [Validators.required]],
       loci: this.fb.array(
         row.loci.map(locus => this.fb.group({
           id: [locus.id],
           alleles: [
             this.formatAlleles(locus.allele_1, locus.allele_2),
-            [
-              Validators.required,
-            ]
+            [Validators.required]
           ]
         }))
       )
     });
+  }
+
+  getLociArray(row: TableRowData): FormArray {
+    const form = this.getRowForm(row);
+    return form.get('loci') as FormArray;
+  }
+
+  addLocus(row: TableRowData, locusName: string): void {
+    const lociArray = this.getLociArray(row);
+
+    lociArray.push(this.fb.group({
+      id: [null],
+      locus_name: [locusName],
+      alleles: ['', [Validators.required]]
+    }));
+
+    const currentLociCount = row.loci.length;
+    const newLocusGroup = lociArray.at(currentLociCount) as FormGroup;
+
+    Object.keys(newLocusGroup.controls).forEach(key => {
+      console.log(newLocusGroup.controls);
+      newLocusGroup.get(key)?.markAsTouched();
+      newLocusGroup.get(key)?.markAsDirty();
+    });
+  }
+
+  removeLocus(row: TableRowData, index: number): void {
+    const lociArray = this.getLociArray(row);
+
+    // Remove from form
+    lociArray.removeAt(index);
+
+    // Mark as dirty
+    lociArray.markAsDirty();
+
+    const form = this.getRowForm(row);
+    form.markAsDirty();
   }
 
   getLocusFormGroup(row: TableRowData, index: number): FormGroup {

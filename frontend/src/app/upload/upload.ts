@@ -29,7 +29,7 @@ export class Upload {
 
   openUploadSheet(): void {
     const sheetRef = this.bottomSheet.open(UploadTopSheet, {
-      disableClose: false,
+      // disableClose: false,
       hasBackdrop: true,
       panelClass: 'upload-top-sheet'
     })

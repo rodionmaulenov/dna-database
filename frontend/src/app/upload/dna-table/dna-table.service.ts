@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { DNADataListResponse } from './models';
+import {CreateLocusData, DNADataListResponse, UpdatePersonData} from './models';
 import {ENVIRONMENT} from '../../config/environment.config';
 
 @Injectable({
@@ -24,7 +24,11 @@ export class DnaTableHttpService {
     return this.http.get<DNADataListResponse>(`${this.apiUrl}/upload/list/`, { params });
   }
 
-  updatePerson(id: number, data: { name: string }): Observable<void> {
+  createLocus(personId: number, data: CreateLocusData): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/upload/persons/${personId}/loci/`, data);
+  }
+
+  updatePerson(id: number, data: UpdatePersonData): Observable<void> {
     return this.http.patch<void>(`${this.apiUrl}/upload/persons/${id}/`, data);
   }
 
@@ -32,13 +36,12 @@ export class DnaTableHttpService {
     return this.http.patch<void>(`${this.apiUrl}/upload/loci/${id}/`, data);
   }
 
-  getFileUrl(filename: string): string {
-    return `http://localhost:8000/media/${filename}`;
-  }
-
   deleteUpload(uploadId: number): Observable<{ success: boolean; message: string }> {
     return this.http.delete<{ success: boolean; message: string }>(
       `${this.apiUrl}/upload/file/${uploadId}/`
     );
+  }
+  deleteLocus(id: number): Observable<any> {
+    return this.http.delete<any>(`${this.apiUrl}/upload/loci/${id}/`);
   }
 }
