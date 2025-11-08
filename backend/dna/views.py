@@ -194,7 +194,7 @@ def get_all_dna_data(
         request,
         person_id: Optional[int] = Query(None, description="Filter by specific person ID"),
         page: int = Query(1, ge=1, description="Page number"),
-        page_size: int = Query(50, ge=1, le=100, description="Items per page")
+        page_size: int = Query(20, ge=1, le=100, description="Items per page")
 ):
     """
     Get DNA data with signed download URLs
