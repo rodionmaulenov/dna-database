@@ -37,6 +37,7 @@ interface DnaTableState {
   pageSize: number;
   totalRecords: number;
   currentPersonFilter: number | null;
+  localPersonFilter: number | null;
   roleFilter: 'parent' | 'child';
   expandedRowId: number | null;
   updatingRowId: number | null;
@@ -49,6 +50,7 @@ export const initialState: DnaTableState = {
   pageSize: 50,
   totalRecords: 0,
   currentPersonFilter: null,
+  localPersonFilter: null,
   roleFilter: 'parent',
   expandedRowId: null,
   updatingRowId: null,

@@ -12,7 +12,7 @@ export class DnaTableHttpService {
   private env = inject(ENVIRONMENT);
   private apiUrl = this.env.apiUrl;
 
-  loadTableData(personId?: number, page: number = 1, pageSize: number = 50): Observable<DNADataListResponse> {
+  loadTableData(personId?: number, page: number = 1, pageSize: number = 20): Observable<DNADataListResponse> {
     let params = new HttpParams()
       .set('page', page.toString())
       .set('page_size', pageSize.toString());

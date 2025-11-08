@@ -14,26 +14,49 @@ export const DnaTableStore = signalStore(
   withState(initialState),
 
   withComputed((store) => ({
-    // Filtered data based on role
+    // ✅ Filter by role AND local person filter
     filteredTableData: computed(() => {
-      const filter = store.roleFilter();
-      const allData = store.tableData();
+      const roleFilter = store.roleFilter();
+      const localFilter = store.localPersonFilter();
+      let data = store.tableData();
 
-      if (filter === 'parent') {
-        return allData.filter(row => row.role === 'father' || row.role === 'mother');
+      // Filter by role
+      if (roleFilter === 'parent') {
+        data = data.filter(row => row.role === 'father' || row.role === 'mother');
       } else {
-        return allData.filter(row => row.role === 'child');
+        data = data.filter(row => row.role === 'child');
       }
+
+      // ✅ Apply local person filter (if set)
+      if (localFilter) {
+        data = data.filter(row =>
+          row.personId === localFilter ||
+          row.relatedPersonId === localFilter
+        );
+      }
+
+      return data;
     }),
 
     // Get filtered person name
     filteredPersonName: computed(() => {
-      const personId = store.currentPersonFilter();
-      if (!personId) return null;
+      // Check local filter first
+      const localFilter = store.localPersonFilter();
+      if (localFilter) {
+        const allData = store.tableData();
+        const person = allData.find(row => row.personId === localFilter);
+        return person?.name || null;
+      }
 
-      const allData = store.tableData();
-      const person = allData.find(row => row.personId === personId);
-      return person?.name || null;
+      // Then check backend search filter
+      const searchFilter = store.currentPersonFilter();
+      if (searchFilter) {
+        const allData = store.tableData();
+        const person = allData.find(row => row.personId === searchFilter);
+        return person?.name || null;
+      }
+
+      return null;
     }),
   })),
 
@@ -83,7 +106,7 @@ export const DnaTableStore = signalStore(
     };
 
     return {
-      // Set role filter
+      // ✅ LOCAL: Set role filter (no backend)
       setRoleFilter(filter: 'parent' | 'child') {
         patchState(store, {
           roleFilter: filter,
@@ -104,12 +127,19 @@ export const DnaTableStore = signalStore(
         return store.expandedRowId() === rowId;
       },
 
-      // Load table data using rxMethod + HTTP service
-      loadTableData: rxMethod<{ personId?: number; page?: number }>(
+      // ✅ Load table data (initial + pagination)
+      loadTableData: rxMethod<{ page?: number }>(
         pipe(
-          tap(() => patchState(store, {loading: true, expandedRowId: null})),
-          switchMap(({personId, page = 1}) => {
-            return httpService.loadTableData(personId, page, store.pageSize()).pipe(
+          tap(() => patchState(store, { loading: true, expandedRowId: null })),
+          switchMap(({ page = 1 }) => {
+            const searchFilter = store.currentPersonFilter();
+
+            // ✅ Use searchFilter from store
+            return httpService.loadTableData(
+              searchFilter || undefined,
+              page,
+              store.pageSize()
+            ).pipe(
               tapResponse({
                 next: (response) => {
                   const rows = buildTableRows(response);
@@ -118,7 +148,6 @@ export const DnaTableStore = signalStore(
                     tableData: rows,
                     currentPage: page,
                     totalRecords: response.total || 0,
-                    currentPersonFilter: personId || null,
                     loading: false,
                   });
                 },
@@ -136,14 +165,38 @@ export const DnaTableStore = signalStore(
         )
       ),
 
-      // Filter by person
-      filterByPerson: rxMethod<{ personId: number; personRole: string }>(
+      // ✅ LOCAL: Filter by person (no backend call)
+      filterByPersonLocal(personId: number, personRole: string) {
+        const targetFilter = personRole === 'child' ? 'child' : 'parent';
+
+        patchState(store, {
+          roleFilter: targetFilter,
+          localPersonFilter: personId,  // ✅ New: Local-only filter
+          expandedRowId: null,
+        });
+
+        const allData = store.tableData();
+        const person = allData.find(row => row.personId === personId);
+
+        if (person) {
+          notificationService.info(`Filtered by: ${person.name} (local)`);
+        }
+      },
+
+      // ✅ BACKEND: Search for matches across entire database
+      searchMatches: rxMethod<{ personId: number; personRole: string }>(
         pipe(
-          tap(({personRole}) => {
+          tap(({ personRole }) => {
             const targetFilter = personRole === 'child' ? 'child' : 'parent';
-            patchState(store, {roleFilter: targetFilter, loading: true});
+            patchState(store, {
+              roleFilter: targetFilter,
+              loading: true,
+              expandedRowId: null,
+              localPersonFilter: null,
+            });
           }),
-          switchMap(({personId}) => {
+          switchMap(({ personId }) => {
+            // ✅ Backend call to search entire database
             return httpService.loadTableData(personId, 1, store.pageSize()).pipe(
               tapResponse({
                 next: (response) => {
@@ -155,17 +208,18 @@ export const DnaTableStore = signalStore(
                     totalRecords: response.total || 0,
                     currentPersonFilter: personId,
                     loading: false,
-                    expandedRowId: null,
                   });
 
-                  const personName = store.filteredPersonName();
+                  const personName = rows.find(r => r.personId === personId)?.name;
                   if (personName) {
-                    notificationService.info(`Filtered by: ${personName}`);
+                    notificationService.success(
+                      `Found ${response.total} matches for: ${personName} (across entire database)`
+                    );
                   }
                 },
                 error: () => {
-                  patchState(store, {loading: false});
-                  notificationService.error('Failed to filter data');
+                  patchState(store, { loading: false });
+                  notificationService.error('Match search failed');
                 }
               })
             );
@@ -173,10 +227,22 @@ export const DnaTableStore = signalStore(
         )
       ),
 
-      // Clear person filter
-      clearPersonFilter: rxMethod<void>(
+      // ✅ Clear local filter only
+      clearLocalFilter() {
+        patchState(store, {
+          localPersonFilter: null,
+          expandedRowId: null,
+        });
+      },
+
+      // ✅ Clear search and reload all data
+      clearSearch: rxMethod<void>(
         pipe(
-          tap(() => patchState(store, {loading: true, expandedRowId: null})),
+          tap(() => patchState(store, {
+            loading: true,
+            expandedRowId: null,
+            localPersonFilter: null,
+          })),
           switchMap(() => {
             return httpService.loadTableData(undefined, 1, store.pageSize()).pipe(
               tapResponse({
@@ -187,15 +253,15 @@ export const DnaTableStore = signalStore(
                     tableData: rows,
                     currentPage: 1,
                     totalRecords: response.total || 0,
-                    currentPersonFilter: null,
+                    currentPersonFilter: null,  // ✅ Clear backend filter
                     loading: false,
                   });
 
-                  notificationService.info('Filter cleared');
+                  notificationService.info('Search cleared');
                 },
                 error: () => {
-                  patchState(store, {loading: false});
-                  notificationService.error('Failed to clear filter');
+                  patchState(store, { loading: false });
+                  notificationService.error('Failed to reload data');
                 }
               })
             );
@@ -203,17 +269,66 @@ export const DnaTableStore = signalStore(
         )
       ),
 
+      // Change page (respects search filter)
+      changePage: rxMethod<{ page: number; pageSize?: number }>(
+        pipe(
+          tap(({ pageSize }) => {
+            patchState(store, { expandedRowId: null, loading: true });
+
+            if (pageSize && pageSize !== store.pageSize()) {
+              patchState(store, { pageSize });
+            }
+          }),
+          switchMap(({ page, pageSize: newPageSize }) => {
+            const searchFilter = store.currentPersonFilter();
+
+            return httpService.loadTableData(
+              searchFilter || undefined,
+              page,
+              newPageSize || store.pageSize()
+            ).pipe(
+              tapResponse({
+                next: (response) => {
+                  const rows = buildTableRows(response);
+
+                  patchState(store, {
+                    tableData: rows,
+                    currentPage: page,
+                    totalRecords: response.total || 0,
+                    loading: false,
+                  });
+                },
+                error: () => {
+                  patchState(store, { loading: false });
+                  notificationService.error('Failed to load page');
+                }
+              })
+            );
+          })
+        )
+      ),
+
+      // Check if backend searching
+      isSearching(): boolean {
+        return store.currentPersonFilter() !== null;
+      },
+
+      // Check if local filtering
+      isLocalFiltering(): boolean {
+        return store.localPersonFilter() !== null;
+      },
+
       // ✅ Method 1: Delete loci
       deleteLoci: rxMethod<{ row: TableRowData; locusIds: number[] }>(
         pipe(
-          switchMap(({ row, locusIds }) => {
+          switchMap(({ locusIds }) => {
             return from(locusIds).pipe(
               concatMap(id => httpService.deleteLocus(id)),
               tapResponse({
                 next: () => {
                   notificationService.success(`Deleted ${locusIds.length} loci`);
                 },
-                error: (error: any) => {
+                error: () => {
                   notificationService.error('Failed to delete loci');
                 }
               })
@@ -270,7 +385,7 @@ export const DnaTableStore = signalStore(
         updates: Array<{ id: number; allele_1: string; allele_2: string }>;
       }>(
         pipe(
-          switchMap(({ row, updates }) => {
+          switchMap(({ updates }) => {
             return from(updates).pipe(
               concatMap(update =>
                 httpService.updateLocus(update.id, {
@@ -403,7 +518,7 @@ export const DnaTableStore = signalStore(
                   patchState(store, { updatingRowId: null });
                   notificationService.success('Updated successfully');
                 },
-                error: (error: any) => {
+                error: () => {
                   patchState(store, { updatingRowId: null });
                   notificationService.error('Update failed');
                 }
@@ -416,44 +531,9 @@ export const DnaTableStore = signalStore(
       // Refresh data
       refreshData() {
         this.loadTableData({
-          personId: store.currentPersonFilter() || undefined,
           page: store.currentPage()
         });
       },
-
-      // Change page
-      changePage: rxMethod<{ page: number; pageSize?: number }>(
-        pipe(
-          tap(({pageSize}) => {
-            patchState(store, {expandedRowId: null, loading: true});
-
-            if (pageSize && pageSize !== store.pageSize()) {
-              patchState(store, {pageSize});
-            }
-          }),
-          switchMap(({page, pageSize: newPageSize}) => {
-            const personId = store.currentPersonFilter();
-            return httpService.loadTableData(personId || undefined, page, newPageSize || store.pageSize()).pipe(
-              tapResponse({
-                next: (response) => {
-                  const rows = buildTableRows(response);
-
-                  patchState(store, {
-                    tableData: rows,
-                    currentPage: page,
-                    totalRecords: response.total || 0,
-                    loading: false,
-                  });
-                },
-                error: () => {
-                  patchState(store, {loading: false});
-                  notificationService.error('Failed to load page');
-                }
-              })
-            );
-          })
-        )
-      ),
 
       // Check if row is updating
       isRowUpdating(personId: number): boolean {

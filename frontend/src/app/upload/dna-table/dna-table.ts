@@ -60,10 +60,6 @@ export class DnaTable implements OnInit {
     this.store.loadTableData({ page: 1 });
   }
 
-  filterByPerson(personId: number, personRole: string) {
-    this.store.filterByPerson({personId, personRole});
-  }
-
   toggle(row: TableRowData) {
     this.store.toggleExpandedRow(row.personId);
   }
@@ -234,5 +230,10 @@ export class DnaTable implements OnInit {
         this.store.deleteRecord(row.id);
       }
     });
+  }
+
+  // ✅ LOCAL: Click related person in table (no backend call)
+  filterByPerson(personId: number, personRole: string) {
+    this.store.filterByPersonLocal(personId, personRole);
   }
 }

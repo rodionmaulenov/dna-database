@@ -13,7 +13,6 @@ import {MatchResult} from '../models';
 import {MatInputModule} from '@angular/material/input';
 import {FormsModule} from '@angular/forms';
 
-
 @Component({
   selector: 'app-upload-top-sheet',
   imports: [
@@ -56,9 +55,4 @@ export class UploadTopSheet {
   clearAll(): void {
     this.store.clearAll();
   }
-
-  close(): void {
-    this.bottomSheetRef.dismiss();
-  }
-
 }

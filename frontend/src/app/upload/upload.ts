@@ -5,7 +5,6 @@ import {DnaTable} from './dna-table/dna-table';
 import {UploadTopSheet} from './upload-top-sheet/upload-top-sheet';
 import {MatBottomSheet} from '@angular/material/bottom-sheet';
 import {DnaTableStore} from './dna-table/dna-table.store';
-import {MatchResult} from './models';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {MatChipsModule} from '@angular/material/chips';
 
@@ -29,22 +28,19 @@ export class Upload {
 
   openUploadSheet(): void {
     const sheetRef = this.bottomSheet.open(UploadTopSheet, {
-      // disableClose: false,
       hasBackdrop: true,
       panelClass: 'upload-top-sheet'
     })
 
     sheetRef.afterDismissed().subscribe((result) => {
       if (result?.action === 'view_match') {
-        this.navigateToMatch(result.match);
+        const match = result.match;
+        // ✅ BACKEND: Search for matches (backend call)
+        this.tableStore.searchMatches({
+          personId: match.person_id,
+          personRole: match.role
+        });
       }
-    });
-  }
-
-  navigateToMatch(match: MatchResult): void {
-    this.tableStore.filterByPerson({
-      personId: match.person_id,
-      personRole: match.role
     });
   }
 
@@ -53,6 +49,7 @@ export class Upload {
   }
 
   clearFilter() {
-    this.tableStore.clearPersonFilter();
+    this.tableStore.clearLocalFilter();
+    this.tableStore.clearSearch();
   }
 }
