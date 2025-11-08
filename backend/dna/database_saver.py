@@ -430,7 +430,33 @@ def save_dna_extraction_to_database(
             # Save parent (if exists)
             if has_parent:
                 if parent_role == 'unknown':
-                    parent_role = 'father'
+                    # Try to determine from role_label in parent_data
+                    role_label = (parent_data.get('role_label', '') or '').lower()
+
+                    if 'mother' in role_label or 'мати' in role_label or 'мать' in role_label:
+                        parent_role = 'mother'
+                    elif 'father' in role_label or 'батько' in role_label or 'отец' in role_label:
+                        parent_role = 'father'
+                    else:
+                        # Last resort: Check Amelogenin
+                        parent_loci = parent_data.get('loci', [])
+                        amelogenin = next((l for l in parent_loci if l.get('locus_name', '').lower() == 'amelogenin'),
+                                          None)
+
+                        if amelogenin:
+                            allele_1 = str(amelogenin.get('allele_1', '')).upper()
+                            allele_2 = str(amelogenin.get('allele_2', '')).upper()
+
+                            # X, Y = Male = Father
+                            # X, X = Female = Mother
+                            if 'Y' in [allele_1, allele_2]:
+                                parent_role = 'father'
+                            else:
+                                parent_role = 'mother'
+                        else:
+                            # Default to father if can't determine
+                            parent_role = 'father'
+                            logger.warning(f"Cannot determine parent gender in {filename}, defaulting to father")
 
                 parent_person = Person.objects.create(
                     uploaded_file=uploaded_file,
