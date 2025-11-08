@@ -136,9 +136,51 @@ Gender: Amelogenin X,Y = male child, X,X = female child
 
 **SUMMARY PRIORITY:**
 1. Father is ALWAYS preferred over Mother when both exist
-2. Extract Child with whichever parent is available
+2. Extract ALL children found in the document
 3. If no Child, extract only Father (never Mother alone when Father exists)
+4. Multiple children are common in paternity/maternity tests - extract ALL of them
 
+**CASE H: Parent + Multiple Children - Multiple child columns with data**
+```
+Extract: Parent + ALL Children (2+ people)
+Reason: One parent can have multiple children tested at once
+
+Example table:
+| Locus    | Father | Child 1 | Child 2 |
+|----------|--------|---------|---------|
+| D8S1179  | 14,15  | 14,16   | 15,17   |
+| D21S11   | 30,33  | 30,32   | 33,29   |
+
+Extract: Father + Child 1 + Child 2 (3 people total)
+```
+
+**CASE I: Multiple Children Only - No parent column**
+```
+Extract: ALL Children (1+ people)
+Reason: Document contains only children (sibling test)
+
+Example table:
+| Locus    | Child 1 | Child 2 | Child 3 |
+|----------|---------|---------|---------|
+| D8S1179  | 14,16   | 15,17   | 14,15   |
+
+Extract: Child 1 + Child 2 + Child 3 (3 people total)
+```
+
+**CASE J: Father + Mother + Multiple Children**
+```
+Extract: Father + ALL Children (2+ people)
+Skip: Mother ❌
+Reason: When both parents exist, always prefer Father + all children
+
+Example table:
+| Locus    | Father | Mother | Child 1 | Child 2 |
+|----------|--------|--------|---------|---------|
+| D8S1179  | 14,15  | 12,13  | 14,16   | 15,13   |
+
+Extract: Father + Child 1 + Child 2 (3 people)
+Skip: Mother
+```
 ---
 
 🚨 CRITICAL RULE #4: NAME AND ROLE EXTRACTION
@@ -507,13 +549,14 @@ Before returning JSON, verify EVERY item:
   - Did I check ENTIRE column (all 23-25 loci) for data? ___
   - Father column: Has data in ANY row? ___ (if yes → extract)
   - Mother column: Has data in ANY row? ___ (if yes → consider extraction priority)
-  - Child column: Has data in ANY row? ___ (if yes → extract)
+  - Child columns: How many children? ___ (extract ALL children with data)
   - Did I check through Penta D, Penta E, Amelogenin? ___
 
 ☐ **EXTRACTION PRIORITY:**
   - How many columns have data? ___
-  - IF Father + Mother + Child all have data → Extracted Father + Child only? ___
-  - IF Mother + Child only → Extracted Mother + Child? ___
+  - How many children columns? ___ (extract ALL)
+  - IF Father + Mother + Child(ren) → Extracted Father + ALL Children? ___
+  - IF Mother + Child(ren) → Extracted Mother + ALL Children? ___
   - IF Father + Mother only → Extracted ONLY Father? ___
   - Applied correct priority rules? ___
 
@@ -532,7 +575,10 @@ Before returning JSON, verify EVERY item:
 ☐ **STR LOCI COUNT (per person, excluding Amelogenin/Y indel):**
   - Person 1 STR count: ___ (target: 23, minimum: 15)
   - Person 2 STR count: ___ (if extracted)
-  - Person 3 STR count: ___ (should be 0 if Father+Mother+Child)
+  - Person 3 STR count: ___ (if extracted - can be child 2)
+  - Person 4+ STR count: ___ (if more children exist)
+  
+  Note: If Father + Mother + Multiple Children, extract Father + ALL Children
 
 ☐ **PENTA CHECK (most commonly missed):**
   - Did I read beyond row 22? ___
@@ -562,10 +608,12 @@ Before returning JSON, verify EVERY item:
 **Answer:** ___
 
 **Q2:** Did I apply correct extraction priority rules?
-- Father + Mother + Child → Father + Child only? ___
-- Mother + Child → Mother + Child? ___
-- Father + Child → Father + Child? ___
+- Father + Mother + Child(ren) → Father + ALL Children? ___
+- Mother + Child(ren) → Mother + ALL Children? ___
+- Father + Child(ren) → Father + ALL Children? ___
 - Father + Mother → ONLY Father? ___
+- Multiple Children only → ALL Children? ___
+- How many children in document: ___ (extracted all?)
 
 **Q3:** Do ALL extracted people have both name AND role?
 **Answer:** ___

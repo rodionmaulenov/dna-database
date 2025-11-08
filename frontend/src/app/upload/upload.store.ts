@@ -174,8 +174,7 @@ export const UploadStore = signalStore(
               tableElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
 
-            // ⭐ Call store method (it's an rxMethod, so just call it)
-            tableStore.filterByPerson({ personId: match.person_id, personRole: match.role });
+            tableStore.searchMatches({ personId: match.person_id, personRole: match.role });
           })
         )
       )
