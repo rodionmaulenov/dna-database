@@ -241,7 +241,7 @@ class MultiAgentDNAExtractor:
                     return None
 
     def _normalize_extraction_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
-        """Convert 'people' array to father/child format"""
+        """Convert 'people' array to parent/child format with correct role detection"""
         people = raw_result.get('people', [])
         people_with_data = [p for p in people if p.get('loci', [])]
 
@@ -255,23 +255,31 @@ class MultiAgentDNAExtractor:
         mother_data = None
         child_data = None
 
+        # Extract people by role
         for person in people_with_data:
             role_label = person.get('role_label', '').lower()
 
-            if 'father' in role_label or 'alleged father' in role_label or 'батько' in role_label:
+            if 'father' in role_label or 'батько' in role_label or 'отец' in role_label:
                 father_data = person
-            elif 'mother' in role_label or 'alleged mother' in role_label or 'мати' in role_label:
+            elif 'mother' in role_label or 'мати' in role_label or 'мать' in role_label:
                 mother_data = person
-            elif 'child' in role_label or 'дитина' in role_label:
+            elif 'child' in role_label or 'дитина' in role_label or 'ребёнок' in role_label:
                 child_data = person
 
-        # Priority logic
+        parent_data = None
+        parent_role = 'unknown'
+
         if father_data:
             parent_data = father_data
+            parent_role = 'father'
         elif mother_data:
             parent_data = mother_data
+            parent_role = 'mother'
         elif len(people_with_data) == 1:
+            # Only one person exists
             parent_data = people_with_data[0]
+            # Determine role from Amelogenin
+            parent_role = self._determine_role_from_amelogenin(parent_data)
         else:
             return {
                 'success': False,
@@ -286,17 +294,44 @@ class MultiAgentDNAExtractor:
 
         return {
             'success': True,
-            'father': parent_data or {'name': None, 'loci': []},
+            'parent': parent_data,  # ✅ Use 'parent' key instead of 'father'
             'child': child_data or {'name': None, 'loci': []},
+            'parent_role': parent_role,  # ✅ Add parent_role ('father' or 'mother')
             'raw_people': people
         }
+
+    def _determine_role_from_amelogenin(self, person_data: Dict[str, Any]) -> str:
+        """Determine if person is father or mother based on Amelogenin"""
+        loci = person_data.get('loci', [])
+
+        amelogenin = next(
+            (l for l in loci if l.get('locus_name', '').lower() == 'amelogenin'),
+            None
+        )
+
+        if amelogenin:
+            allele_1 = str(amelogenin.get('allele_1', '')).upper()
+            allele_2 = str(amelogenin.get('allele_2', '')).upper()
+
+            # X, Y = Male = Father
+            # X, X = Female = Mother
+            if 'Y' in [allele_1, allele_2]:
+                return 'father'
+            else:
+                return 'mother'
+
+        return 'unknown'
 
     def _count_total_loci(self, data: Dict[str, Any]) -> int:
         """Count total loci"""
         count = 0
-        for role in ['father', 'mother', 'child']:
-            if data.get(role) and isinstance(data[role].get('loci'), list):
-                count += len(data[role]['loci'])
+
+        if data.get('parent') and isinstance(data['parent'].get('loci'), list):
+            count += len(data['parent']['loci'])
+
+        if data.get('child') and isinstance(data['child'].get('loci'), list):
+            count += len(data['child']['loci'])
+
         return count
 
     def _validate_extraction(self, result: Dict[str, Any]) -> Dict[str, Any]:
@@ -313,29 +348,29 @@ class MultiAgentDNAExtractor:
                 'parent_role': 'unknown'
             }
 
-        father_data = result.get('father', {})
-        father_loci = father_data.get('loci', [])
+        # ✅ FIXED: Get parent data correctly
+        parent_data = result.get('parent', {})
+        parent_loci = parent_data.get('loci', [])
+        parent_role = result.get('parent_role', 'unknown')  # ✅ Get actual role
 
         child_data = result.get('child', {})
         child_loci = child_data.get('loci', [])
 
         # Check completeness
-        if len(father_loci) == 0 and len(child_loci) == 0:
+        if len(parent_loci) == 0 and len(child_loci) == 0:
             issues.append("No data extracted")
             score = 0.0
 
-        if len(father_loci) > 0 and len(father_loci) < 10:
-            issues.append(f"Father has only {len(father_loci)} loci")
+        if len(parent_loci) > 0 and len(parent_loci) < 10:
+            issues.append(f"Parent has only {len(parent_loci)} loci")
             score -= 0.2
 
         if len(child_loci) > 0 and len(child_loci) < 10:
             issues.append(f"Child has only {len(child_loci)} loci")
             score -= 0.3
 
-        parent_role = 'father' if len(father_loci) > 0 else 'unknown'
-
         # Check for duplicates
-        for person_name, person_loci in [('father', father_loci), ('child', child_loci)]:
+        for person_name, person_loci in [('parent', parent_loci), ('child', child_loci)]:
             if len(person_loci) == 0:
                 continue
 
