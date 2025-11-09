@@ -218,7 +218,7 @@ export const DnaTableStore = signalStore(
                   patchState(store, {
                     tableData: rows,
                     currentPage: page,
-                    totalRecords: response.total || 0,
+                    totalRecords: response.total,
                     loading: false,
                   });
                 },

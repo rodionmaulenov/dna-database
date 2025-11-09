@@ -1,20 +1,20 @@
 <div class="table-container">
   <div class="table-wrapper">
 
+    @if (store.loading()) {
+      <div class="loading-shade">
+        <mat-spinner diameter="40"></mat-spinner>
+      </div>
+    }
+
     <!-- ✅ Wrap table in virtual scroll viewport -->
-    <cdk-virtual-scroll-viewport
-      itemSize="57"
-      [minBufferPx]="228"
-      [maxBufferPx]="456"
-      class="table-scroll-container mat-elevation-z8">
+    <div class="table-scroll-container mat-elevation-z8">
 
-      @if (store.loading()) {
-        <div class="loading-shade">
-          <mat-spinner diameter="40"></mat-spinner>
-        </div>
-      }
-
-      <table mat-table [dataSource]="store.filteredTableData()" multiTemplateDataRows tabindex="0">
+      <table mat-table
+             [dataSource]="dataSource"
+             [trackBy]="trackByPersonId"
+             multiTemplateDataRows
+             tabindex="0">
 
         <!-- All your existing column definitions -->
         <ng-container matColumnDef="number">
@@ -263,14 +263,14 @@
         <tr mat-row *matRowDef="let row; columns: ['expandedDetail']" class="detail-row"></tr>
       </table>
 
-    </cdk-virtual-scroll-viewport>
+    </div>
 
     <!-- Paginator stays outside viewport -->
     <mat-paginator
       [length]="store.totalRecords()"
       [pageSize]="store.pageSize()"
       [pageIndex]="store.currentPage() - 1"
-      [pageSizeOptions]="[20, 50, 100]"
+      [pageSizeOptions]="[20, 50]"
       (page)="onPageChange($event)"
       showFirstLastButtons
       aria-label="Select page">

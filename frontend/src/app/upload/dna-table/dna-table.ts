@@ -1,5 +1,5 @@
-import {ChangeDetectionStrategy, Component, inject, OnInit} from '@angular/core';
-import {MatTableModule} from '@angular/material/table';
+import {ChangeDetectionStrategy, Component, effect, inject, OnInit} from '@angular/core';
+import {MatTableDataSource, MatTableModule} from '@angular/material/table';
 import {MatProgressSpinnerModule} from '@angular/material/progress-spinner';
 import {MatInputModule} from '@angular/material/input';
 import {MatIconModule} from '@angular/material/icon';
@@ -47,7 +47,7 @@ export class DnaTable implements OnInit {
   formService = inject(DnaTableFormService);
   private dialog = inject(MatDialog);
   private notificationService = inject(NotificationService);
-
+  dataSource = new MatTableDataSource<TableRowData>([]);
   private deletedLoci = new Map<number, number[]>();
 
   // ✅ Track which row is in "adding" mode
@@ -58,8 +58,16 @@ export class DnaTable implements OnInit {
     'number', 'name', 'role', 'loci_count', 'related_person', 'file', 'actions'
   ];
 
+  trackByPersonId(index: number, row: TableRowData): number {
+    return row.personId;
+  }
+
   ngOnInit() {
     this.store.loadTableData({ page: 1 });
+
+    effect(() => {
+      this.dataSource.data = this.store.filteredTableData();
+    });
   }
 
   getFiles(element: TableRowData): Array<{ id: number; file: string; uploaded_at: string }> {

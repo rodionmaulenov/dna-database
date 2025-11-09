@@ -190,78 +190,82 @@ def match_file(request, file: File[NinjaUploadedFile], role: str = Form(...)):
 
 
 @upload_router.get('list/', response=DNADataListResponse)
-def get_all_dna_data(
-        request,
-        person_id: Optional[int] = Query(None, description="Filter by specific person ID"),
-        page: int = Query(1, ge=1, description="Page number"),
-        page_size: int = Query(20, ge=1, le=100, description="Items per page")
-):
-    """
-    Get DNA data with signed download URLs
-    Shows unique parents ordered by most recent file upload
-    """
+def get_all_dna_data(request, person_id: Optional[int] = None, page: int = 1, page_size: int = 20):
     try:
         if person_id:
-            # Get specific person
+            # Single person - total is 1
             person = Person.objects.get(id=person_id)
 
-            # Get all files for this person
-            person_files = person.uploaded_files.all().order_by('-uploaded_at')
+            if person.role in ['father', 'mother']:
+                person_files = person.uploaded_files.all().order_by('-uploaded_at')
 
-            # Get the most recent file
-            if person_files.exists():
-                upload = person_files.first()
+                if person_files.exists():
+                    upload = person_files.first()
+                    all_persons_in_file = upload.persons.all()
+                    result = _build_response_for_upload(upload, all_persons_in_file)
 
-                # Get all persons in this file
-                all_persons_in_file = upload.persons.all()
-
-                result = _build_response_for_upload(upload, all_persons_in_file)
-
-                return DNADataListResponse(
-                    data=[result] if result else [],
-                    total=1,
-                    page=1,
-                    page_size=page_size
-                )
+                    return DNADataListResponse(
+                        data=[result] if result else [],
+                        total=1,  # ✅ Correct
+                        page=1,
+                        page_size=page_size
+                    )
             else:
-                return DNADataListResponse(data=[], total=0, page=1, page_size=page_size)
+                # Child - find parent
+                child_files = person.uploaded_files.all()
+                parent = Person.objects.filter(
+                    uploaded_files__in=child_files,
+                    role__in=['father', 'mother']
+                ).first()
+
+                if parent:
+                    parent_files = parent.uploaded_files.all().order_by('-uploaded_at')
+                    upload = parent_files.first()
+                    all_persons_in_file = upload.persons.all()
+                    result = _build_response_for_upload(upload, all_persons_in_file)
+
+                    return DNADataListResponse(
+                        data=[result] if result else [],
+                        total=1,  # ✅ Correct
+                        page=1,
+                        page_size=page_size
+                    )
+
+            return DNADataListResponse(data=[], total=0, page=1, page_size=page_size)
 
         else:
-            # ✅ NEW: Get all uploads ordered by newest first
+            # ✅ ALL PARENTS - Calculate total BEFORE pagination
+
+            # Get unique parent count (TOTAL, not paginated)
+            total_parents = Person.objects.filter(
+                role__in=['father', 'mother']
+            ).distinct().count()
+
+            # Now get paginated uploads
             all_uploads = UploadedFile.objects.all().order_by('-uploaded_at')
 
-            total_count = all_uploads.count()
+            # Apply pagination to uploads
             start = (page - 1) * page_size
             end = start + page_size
-
             uploads = all_uploads[start:end]
 
-            # Build responses
             result = []
-            seen_parents = set()  # ✅ Track which parents we've already shown
+            seen_parents = set()
 
             for upload in uploads:
                 all_persons_in_file = upload.persons.all()
-
-                # ✅ Check if this upload has a parent
                 parent = all_persons_in_file.filter(role__in=['father', 'mother']).first()
 
                 if parent:
-                    # ✅ Only show parent once (their most recent upload)
                     if parent.id not in seen_parents:
                         seen_parents.add(parent.id)
                         response = _build_response_for_upload(upload, all_persons_in_file)
                         if response:
                             result.append(response)
-                else:
-                    # ✅ No parent (orphan children) - always show
-                    response = _build_response_for_upload(upload, all_persons_in_file)
-                    if response:
-                        result.append(response)
 
             return DNADataListResponse(
                 data=result,
-                total=len(result),  # ✅ Actual count after deduplication
+                total=total_parents,  # ✅ Use total parent count
                 page=page,
                 page_size=page_size
             )

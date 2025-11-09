@@ -47,38 +47,75 @@
   background: white;
 }
 
+//.table-scroll-container {
+//  position: relative;
+//  display: flex;
+//  flex-direction: column;
+//  height: 630px; // ✅ Fixed height required for virtual scrolling
+//  overflow: hidden;
+//  border: 1px solid #e0e0e0;
+//  border-radius: 16px 16px 0 0;
+//
+//  // ⭐ Tablet (landscape and portrait)
+//  @media (max-width: 1024px) {
+//    height: 70vh;
+//  }
+//
+//  // ⭐ Mobile (large phones)
+//  @media (max-width: 768px) {
+//    height: 60vh;
+//  }
+//
+//  // ⭐ Mobile (small phones)
+//  @media (max-width: 480px) {
+//    height: 50vh;
+//    min-height: 300px;
+//  }
+//}
+//
+//.loading-shade {
+//  position: absolute;
+//  top: 0;
+//  left: 0;
+//  bottom: 0;
+//  right: 0;
+//  z-index: 1;
+//  display: flex;
+//  align-items: center;
+//  justify-content: center;
+//  border-radius: 16px 16px 0 0;
+//}
+
 .table-scroll-container {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  height: 630px; // ✅ Fixed height required for virtual scrolling
+  min-height: 300px;
+  max-height: 7000px;
+  overflow: auto;
   border: 1px solid #e0e0e0;
   border-radius: 16px 16px 0 0;
 
-  // ⭐ Tablet (landscape and portrait)
   @media (max-width: 1024px) {
-    height: 70vh;
+    max-height: 70vh;
   }
 
-  // ⭐ Mobile (large phones)
   @media (max-width: 768px) {
-    height: 60vh;
+    max-height: 60vh;
   }
 
-  // ⭐ Mobile (small phones)
   @media (max-width: 480px) {
-    height: 50vh;
+    max-height: 50vh;
     min-height: 300px;
   }
 }
 
 .loading-shade {
   position: absolute;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  right: 0;
-  z-index: 1;
+  top: 20px;
+  left: 16px;
+  right: 16px;
+  bottom: 72px;
+  background: rgba(255, 255, 255, 0.9);
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
