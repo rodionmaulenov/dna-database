@@ -22,20 +22,24 @@ GENDER_MARKERS = ['amelogenin', 'y indel', 'y-indel']
 
 def check_parent_and_children_duplicates(extraction_result: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Smart duplicate detection with Many-to-Many relationship
-    - Check if parent exists (by DNA)
-    - Check if each child exists (by DNA)
+    Intelligent duplicate detection with DNA fingerprint matching
+
+    Rules:
+    1. Parent-to-Parent match: BOTH alleles must match (same person)
+    2. Parent-to-Child match: AT LEAST 1 allele must match (inheritance)
+    3. Role matters: Father DNA ≠ Mother DNA
 
     Returns:
         {
             'parent_exists': bool,
-            'existing_parent': Person or None,
-            'new_children': List of child data that are NEW,
-            'duplicate_children': List of child names that already exist,
+            'existing_parent': Person | None,
+            'new_children': List[Dict],
+            'duplicate_children': List[Dict],
         }
     """
     parent_data = extraction_result.get('parent') or extraction_result.get('father', {})
     children_data = extraction_result.get('children', [])
+    parent_role = extraction_result.get('parent_role', 'unknown')
 
     if not children_data:
         single_child = extraction_result.get('child')
@@ -43,93 +47,187 @@ def check_parent_and_children_duplicates(extraction_result: Dict[str, Any]) -> D
             children_data = [single_child]
 
     parent_loci = parent_data.get('loci', [])
+    parent_name = parent_data.get('name', 'Unknown')
 
-    # Build fingerprints
-    critical_loci = ['D8S1179', 'D21S11', 'D7S820', 'D3S1358', 'FGA']
-    parent_fingerprint = _build_fingerprint(parent_loci, critical_loci)
+    # Critical loci for matching (most reliable)
+    critical_loci = ['D8S1179', 'D21S11', 'D7S820', 'D3S1358', 'FGA', 'D13S317', 'D16S539']
 
     result = {
         'parent_exists': False,
-        'existing_parent': None,
+        'existing_parent': None,  # Type: Person | None
         'new_children': [],
         'duplicate_children': [],
     }
 
-    if len(parent_fingerprint) < 3:
+    # Build uploaded parent fingerprint
+    uploaded_fingerprint = _build_fingerprint(parent_loci, critical_loci)
+
+    if len(uploaded_fingerprint) < 4:
+        logger.info(f"Not enough loci for duplicate detection ({len(uploaded_fingerprint)}), treating as new")
         result['new_children'] = children_data
         return result
 
-    # ✅ Step 1: Find if parent exists
-    all_parents = Person.objects.filter(role__in=['father', 'mother'])
+    # ✅ STEP 1: Find matching parent (same role only)
+    if parent_role == 'father':
+        candidate_parents = Person.objects.filter(role='father')
+    elif parent_role == 'mother':
+        candidate_parents = Person.objects.filter(role='mother')
+    else:
+        candidate_parents = Person.objects.filter(role__in=['father', 'mother'])
+
+    logger.info(
+        f"Checking {parent_name} ({parent_role}) with {len(uploaded_fingerprint)} critical loci "
+        f"against {candidate_parents.count()} existing {parent_role}s"
+    )
 
     existing_parent = None
-    for parent in all_parents:
-        existing_loci = DNALocus.objects.filter(
-            person=parent,
+    best_match_score = 0.0
+
+    for candidate in candidate_parents:
+        candidate_loci = DNALocus.objects.filter(
+            person=candidate,
             locus_name__in=critical_loci
         )
 
-        existing_fingerprint = {}
-        for locus in existing_loci:
+        candidate_fingerprint = {}
+        for locus in candidate_loci:
             allele_1 = str(locus.allele_1).strip()
             allele_2 = str(locus.allele_2 or '').strip()
             alleles = tuple(sorted([allele_1, allele_2]))
-            existing_fingerprint[locus.locus_name] = alleles
+            candidate_fingerprint[locus.locus_name] = alleles
 
-        matches, total = _compare_fingerprints(parent_fingerprint, existing_fingerprint, critical_loci)
+        # ✅ Compare with EXACT match (both alleles)
+        matches, total_compared = _compare_fingerprints_exact(
+            uploaded_fingerprint,
+            candidate_fingerprint,
+            critical_loci
+        )
 
-        if total >= 3 and (matches / total) >= 0.8:
-            existing_parent = parent
-            result['parent_exists'] = True
-            result['existing_parent'] = parent
-            break
+        if total_compared == 0:
+            continue
 
-    # ✅ Step 2: Check each child
+        match_percentage = (matches / total_compared) * 100
+
+        logger.info(
+            f"  Comparing with {candidate.name}: "
+            f"{matches}/{total_compared} loci match exactly ({match_percentage:.1f}%)"
+        )
+
+        # ✅ Parent match: 80%+ exact match
+        if total_compared >= 4 and match_percentage >= 80:
+            if match_percentage > best_match_score:
+                best_match_score = match_percentage
+                existing_parent = candidate
+
     if existing_parent:
-        # ✅ Get all children across ALL files linked to this parent
-        all_files_with_parent = existing_parent.uploaded_files.all()
-        existing_children = Person.objects.filter(
-            uploaded_files__in=all_files_with_parent,
-            role='child'
-        ).distinct()
+        logger.info(
+            f"✅ Found matching parent: {existing_parent.name} "
+            f"(ID: {existing_parent.id}, {best_match_score:.1f}% match)"
+        )
+        result['parent_exists'] = True
+        result['existing_parent'] = existing_parent
 
-        for child_data in children_data:
-            child_loci = child_data.get('loci', [])
-            child_fingerprint = _build_fingerprint(child_loci, critical_loci)
+        # ✅ STEP 2: Check children
+        if len(children_data) > 0:
+            all_files_with_parent = existing_parent.uploaded_files.all()
+            existing_children = Person.objects.filter(
+                uploaded_files__in=all_files_with_parent,
+                role='child'
+            ).distinct()
 
-            is_duplicate = False
-            for existing_child in existing_children:
-                child_existing_loci = DNALocus.objects.filter(
-                    person=existing_child,
-                    locus_name__in=critical_loci
-                )
+            logger.info(
+                f"  Parent has {existing_children.count()} existing children, "
+                f"checking {len(children_data)} uploaded children"
+            )
 
-                child_existing_fingerprint = {}
-                for locus in child_existing_loci:
-                    allele_1 = str(locus.allele_1).strip()
-                    allele_2 = str(locus.allele_2 or '').strip()
-                    alleles = tuple(sorted([allele_1, allele_2]))
-                    child_existing_fingerprint[locus.locus_name] = alleles
+            for child_data in children_data:
+                child_loci = child_data.get('loci', [])
+                child_name = child_data.get('name', 'Unknown')
+                child_fingerprint = _build_fingerprint(child_loci, critical_loci)
 
-                child_matches, child_total = _compare_fingerprints(
-                    child_fingerprint,
-                    child_existing_fingerprint,
-                    critical_loci
-                )
+                if len(child_fingerprint) < 4:
+                    logger.info(f"  Child {child_name}: Not enough loci, accepting as new")
+                    result['new_children'].append(child_data)
+                    continue
 
-                if child_total >= 3 and (child_matches / child_total) >= 0.8:
-                    # This child already exists
-                    is_duplicate = True
-                    result['duplicate_children'].append(child_data.get('name', 'Unknown'))
-                    break
+                is_duplicate = False
 
-            if not is_duplicate:
-                result['new_children'].append(child_data)
+                for existing_child in existing_children:
+                    existing_child_loci = DNALocus.objects.filter(
+                        person=existing_child,
+                        locus_name__in=critical_loci
+                    )
+
+                    existing_child_fingerprint = {}
+                    for locus in existing_child_loci:
+                        allele_1 = str(locus.allele_1).strip()
+                        allele_2 = str(locus.allele_2 or '').strip()
+                        alleles = tuple(sorted([allele_1, allele_2]))
+                        existing_child_fingerprint[locus.locus_name] = alleles
+
+                    # ✅ Child-to-child: EXACT match (both alleles)
+                    child_matches, child_total = _compare_fingerprints_exact(
+                        child_fingerprint,
+                        existing_child_fingerprint,
+                        critical_loci
+                    )
+
+                    if child_total >= 4:
+                        child_match_percentage = (child_matches / child_total) * 100
+
+                        logger.info(
+                            f"  Child {child_name} vs {existing_child.name}: "
+                            f"{child_matches}/{child_total} exact match ({child_match_percentage:.1f}%)"
+                        )
+
+                        # ✅ Child duplicate: 80%+ exact match
+                        if child_match_percentage >= 80:
+                            is_duplicate = True
+                            result['duplicate_children'].append({
+                                'name': child_name,
+                                'person_id': existing_child.id
+                            })
+                            logger.info(f"  ❌ Child {child_name} is duplicate of {existing_child.name}")
+                            break
+
+                if not is_duplicate:
+                    result['new_children'].append(child_data)
+                    logger.info(f"  ✅ Child {child_name} is NEW")
+        else:
+            logger.info("  No children in upload - parent loci enrichment")
+
     else:
-        # Parent is new, all children are new
+        logger.info(f"✅ {parent_name} ({parent_role}) is NEW")
         result['new_children'] = children_data
 
     return result
+
+
+def _compare_fingerprints_exact(fp1: Dict, fp2: Dict, critical_loci: List[str]) -> tuple[int, int]:
+    """
+    Compare two DNA fingerprints with EXACT allele matching
+    Used for person-to-person duplicate detection (not parent-child)
+
+    Args:
+        fp1: First fingerprint {locus_name: (allele1, allele2)}
+        fp2: Second fingerprint {locus_name: (allele1, allele2)}
+        critical_loci: List of locus names to compare
+
+    Returns:
+        (matches, total_compared) where match = both alleles identical
+    """
+    matches = 0
+    total = 0
+
+    for locus_name in critical_loci:
+        if locus_name in fp1 and locus_name in fp2:
+            total += 1
+
+            # ✅ EXACT match: both alleles must be identical
+            if fp1[locus_name] == fp2[locus_name]:
+                matches += 1
+
+    return matches, total
 
 
 def _count_valid_loci(loci: List[Dict]) -> int:
@@ -619,6 +717,7 @@ def save_dna_extraction_to_database(
             'success': False,
             'errors': ["Server error occurred"],
         }
+
 
 def _cleanup_temp_file(file_path: str):
     """Helper to safely delete temp file"""
