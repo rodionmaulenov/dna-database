@@ -93,6 +93,9 @@ def check_duplicate_by_alleles(extraction_result: Dict[str, Any]) -> Dict[str, A
                     matches += 1
 
         if total_compared >= 3 and (matches / total_compared) >= 0.8:
+            # ✅ Get existing person's name
+            existing_name = existing_parent.name or "Unknown"
+
             logger.error(
                 f"Duplicate DNA detected: Upload ID {upload.id}, "
                 f"Match ratio: {matches}/{total_compared}"
@@ -100,6 +103,7 @@ def check_duplicate_by_alleles(extraction_result: Dict[str, Any]) -> Dict[str, A
             return {
                 'is_duplicate': True,
                 'existing_upload_id': upload.id,
+                'existing_person_name': existing_name,  # ✅ Add this
                 'match_ratio': f"{matches}/{total_compared}"
             }
 
@@ -230,6 +234,9 @@ def save_dna_extraction_to_database(
         duplicate_check = check_duplicate_by_alleles(extraction_result)
 
         if duplicate_check['is_duplicate']:
+            # ✅ Get the duplicate person's name
+            existing_name = duplicate_check.get('existing_person_name', 'Unknown')
+
             logger.error(
                 f"Duplicate DNA detected: Upload ID {duplicate_check['existing_upload_id']}, "
                 f"Match ratio: {duplicate_check['match_ratio']}, "
@@ -237,7 +244,7 @@ def save_dna_extraction_to_database(
             )
             return {
                 'success': False,
-                'errors': ["Duplicate DNA data detected"],
+                'errors': [f"Duplicate DNA data detected: {existing_name}"],  # ✅ Add name
             }
 
         # === STEP 2: Extract Data ===
