@@ -95,7 +95,7 @@ def upload_files(request, file: File[NinjaUploadedFile]):
 
         result = process_file_upload.apply_async(
             args=[local_file_path, file.name]
-        )
+        ).get(timeout=360)
 
         # # Clean up temp file
         if os.path.exists(local_file_path):
