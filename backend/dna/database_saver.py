@@ -665,6 +665,7 @@ def _safe_confidence(value: Any, default: float = 1.0) -> float:
 def _fix_common_ocr_errors(locus_name: str) -> str:
     """
     Fix common OCR errors in locus names
+    Enhanced with D5S818 pattern recognition
     """
     if not locus_name:
         return locus_name
@@ -694,10 +695,27 @@ def _fix_common_ocr_errors(locus_name: str) -> str:
         'D1OS1248': 'D10S1248',
         'DI0S1248': 'D10S1248',
 
+        # ✅ D5S818 variations (MOST COMMON ERRORS)
+        'D5S8l8': 'D5S818',  # lowercase L instead of 1
+        'D5S8I8': 'D5S818',  # capital I instead of 1
+        'D5S81B': 'D5S818',  # capital B instead of 8
+        'D5SB18': 'D5S818',  # capital B instead of first 8
+        'DSS818': 'D5S818',  # missing 5
+        'D5S8lB': 'D5S818',  # L and B
+        'D5SB1B': 'D5S818',  # B and B
+        'D5S8IB': 'D5S818',  # I and B
+
         # D8S1179 variations
         'D8SI179': 'D8S1179',
         'D8S1I79': 'D8S1179',
         'D8SII79': 'D8S1179',
+        'D8Sl179': 'D8S1179',
+        'D8S1l79': 'D8S1179',
+
+        # D6S1043 variations
+        'D6S1O43': 'D6S1043',
+        'D6Sl043': 'D6S1043',
+        'D6S1O4B': 'D6S1043',
 
         # vWA variations
         'VWA': 'vWA',
@@ -721,6 +739,52 @@ def _fix_common_ocr_errors(locus_name: str) -> str:
         corrected = corrections[locus_upper]
         logger.info(f"🔧 Auto-corrected locus: {locus_name} → {corrected}")
         return corrected
+
+    # ✅ NEW: Pattern-based correction for D-loci (D + numbers + S + numbers)
+    if locus_name.startswith('D') and 'S' in locus_name:
+        # Apply character substitution rules
+        fixed_name = locus_name
+
+        # Replace common OCR confusions in the numeric parts
+        # Split by 'S'
+        parts = fixed_name.split('S', 1)
+        if len(parts) == 2:
+            prefix, suffix = parts
+
+            # Fix prefix (D + numbers only)
+            fixed_prefix = 'D'
+            for char in prefix[1:]:  # Skip 'D'
+                if char in ('l', 'I'):
+                    fixed_prefix += '1'
+                elif char in ('O', 'o'):
+                    fixed_prefix += '0'
+                elif char.isdigit():
+                    fixed_prefix += char
+                else:
+                    fixed_prefix += char  # Keep as-is if unknown
+
+            # Fix suffix (numbers only)
+            fixed_suffix = ''
+            for char in suffix:
+                if char in ('l', 'I'):
+                    fixed_suffix += '1'
+                elif char in ('O', 'o'):
+                    fixed_suffix += '0'
+                elif char == 'B':
+                    fixed_suffix += '8'
+                elif char.isdigit():
+                    fixed_suffix += char
+                else:
+                    fixed_suffix += char  # Keep as-is if unknown
+
+            corrected = f"{fixed_prefix}S{fixed_suffix}"
+
+            # Check if correction was made
+            if corrected != locus_name:
+                # Validate corrected name is in valid loci
+                if corrected in DNALocus.LOCUS_NAMES:
+                    logger.info(f"🔧 Pattern-corrected locus: {locus_name} → {corrected}")
+                    return corrected
 
     # Special case for vWA (needs lowercase v)
     if locus_upper == 'VWA':

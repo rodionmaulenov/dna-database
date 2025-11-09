@@ -494,14 +494,103 @@ Target: 23 loci per person (minimum 15 acceptable for some labs).
 
 🚨 CRITICAL RULE #9: LOCUS NAME SPELLING - AUTO-CORRECT OCR ERRORS
 
+⚠️ **D5S818 IS THE MOST PROBLEMATIC LOCUS - APPLY EXTRA ATTENTION!**
+
 Common OCR mistakes - fix automatically:
 
-1. **CSF1PO:** ❌ "CSF1P0" (zero at end) → ✅ "CSF1PO" (letter O at end)
-2. **D21S11:** ❌ "D2IS11" (letter I) → ✅ "D21S11" (number 1)
-3. **D10S1248:** ❌ "DlOS1248" (lowercase L) → ✅ "D10S1248" (number 1 and 0)
-4. **vWA:** ❌ "VWA" (uppercase V) → ✅ "vWA" (lowercase v)
-5. **D5S818:** ❌ "D5S8l8" (letter l) → ✅ "D5S818" (number 1)
+**1. D5S818 (CRITICAL - 8 different error patterns):**
+   ❌ "D5S8l8" (lowercase L instead of 1) → ✅ "D5S818"
+   ❌ "D5S8I8" (capital I instead of 1) → ✅ "D5S818"
+   ❌ "D5S81B" (capital B instead of last 8) → ✅ "D5S818"
+   ❌ "D5SB18" (capital B instead of first 8) → ✅ "D5S818"
+   ❌ "DSS818" (missing 5) → ✅ "D5S818"
+   ❌ "D5S8lB" (lowercase L and B) → ✅ "D5S818"
+   ❌ "D5SB1B" (two Bs) → ✅ "D5S818"
+   ❌ "D5S8IB" (capital I and B) → ✅ "D5S818"
+   
+   **Correct format:** D + 5 + S + 8 + 1 + 8 (all numbers except D and S)
+   **Pattern check:** If you see "D5S" followed by characters that look like "818", verify each digit:
+   - Position 1 after S: Should be 8 (watch for B)
+   - Position 2 after S: Should be 1 (watch for l, I)
+   - Position 3 after S: Should be 8 (watch for B)
 
+**2. CSF1PO:**
+   ❌ "CSF1P0" (zero at end) → ✅ "CSF1PO" (letter O at end)
+   ❌ "CSFlPO" (lowercase L) → ✅ "CSF1PO"
+
+**3. D21S11:**
+   ❌ "D2IS11" (letter I instead of 1) → ✅ "D21S11"
+   ❌ "D2ISI1" (letter I) → ✅ "D21S11"
+   ❌ "D21SI1" (letter I at end) → ✅ "D21S11"
+
+**4. D10S1248:**
+   ❌ "DlOS1248" (lowercase L instead of 1) → ✅ "D10S1248"
+   ❌ "D1OS1248" (letter O instead of 0) → ✅ "D10S1248"
+   ❌ "DI0S1248" (capital I instead of 1) → ✅ "D10S1248"
+
+**5. vWA:**
+   ❌ "VWA" (uppercase V) → ✅ "vWA" (lowercase v)
+   ❌ "VVA" (double V) → ✅ "vWA"
+
+**6. D6S1043:**
+   ❌ "D6S1O43" (letter O instead of 0) → ✅ "D6S1043"
+   ❌ "D6Sl043" (lowercase L instead of 1) → ✅ "D6S1043"
+   ❌ "D6S1O4B" (O and B) → ✅ "D6S1043"
+
+**7. D8S1179:**
+   ❌ "D8Sl179" (lowercase L instead of first 1) → ✅ "D8S1179"
+   ❌ "D8S1l79" (lowercase L instead of second 1) → ✅ "D8S1179"
+   ❌ "D8SI179" (capital I instead of 1) → ✅ "D8S1179"
+
+**OCR Character Confusion Reference Table:**
+| OCR Sees | Should Be | Common In     | Fix Rule      |
+|----------|-----------|---------------|---------------|
+| l (L)    | 1 (one)   | D5S8l8        | l → 1         |
+| I (i)    | 1 (one)   | D5S8I8        | I → 1         |
+| O (o)    | 0 (zero)  | D6S1O43       | O → 0         |
+| B        | 8 (eight) | D5S81B        | B → 8         |
+| S        | 5 (five)  | DSS818        | Missing digit |
+
+**Auto-correction Algorithm:**
+```
+FOR each locus name matching pattern D[chars]S[chars]:
+    1. Split at 'S'
+    2. For prefix (after D):
+       - Replace (l, I) with 1
+       - Replace (O, o) with 0
+       - Keep all numbers
+    3. For suffix (after S):
+       - Replace (l, I) with 1
+       - Replace (O, o) with 0
+       - Replace B with 8
+       - Keep all numbers
+    4. Reconstruct: D + fixed_prefix + S + fixed_suffix
+    5. Validate against valid loci list
+```
+
+**CRITICAL VERIFICATION FOR D5S818:**
+After extracting any locus that looks like "D5S8??" (where ? is any character):
+1. Check character after S: is it "8" or something else (l, I, B)?
+2. Check second character: is it "1" or something else (l, I)?
+3. Check third character: is it "8" or something else (B)?
+4. Auto-correct according to rules above
+
+**Example corrections:**
+```
+Input:  D5S8lB  (lowercase L, capital B)
+Step 1: Split → "D5" + "S" + "8lB"
+Step 2: Fix prefix → "D5" (no change)
+Step 3: Fix suffix → "8" + "1" (l→1) + "8" (B→8) = "818"
+Output: D5S818 ✅
+
+Input:  D5SB1B  (two Bs)
+Step 1: Split → "D5" + "S" + "B1B"
+Step 2: Fix prefix → "D5" (no change)
+Step 3: Fix suffix → "8" (B→8) + "1" + "8" (B→8) = "818"
+Output: D5S818 ✅
+```
+
+**IMPORTANT:** Apply these corrections DURING extraction, not after. If you see a malformed locus name, correct it immediately before adding to output JSON.
 ---
 
 🚨 CRITICAL RULE #10: DECIMAL POINTS & ALLELE FORMATTING
