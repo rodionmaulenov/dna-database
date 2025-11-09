@@ -48,8 +48,18 @@ export class Upload {
     this.tableStore.setRoleFilter(filter);
   }
 
-  clearFilter() {
+  // ✅ Clear local filter only
+  clearLocalFilter() {
     this.tableStore.clearLocalFilter();
+  }
+
+  // ✅ Clear backend search
+  clearSearch() {
     this.tableStore.clearSearch();
+  }
+
+  // ✅ Clear multiple person filter
+  clearMultipleFilter() {
+    this.tableStore.clearMultipleFilter();
   }
 }

@@ -7,6 +7,7 @@ import {inject} from '@angular/core';
 import {DNADataListResponse, initialState, TableRowData} from './models';
 import {NotificationService} from '../../shared/services/notification.service';
 import {DnaTableHttpService} from './dna-table.service';
+import {PersonData} from '../models';
 
 export const DnaTableStore = signalStore(
   {providedIn: 'root'},
@@ -18,6 +19,7 @@ export const DnaTableStore = signalStore(
     filteredTableData: computed(() => {
       const roleFilter = store.roleFilter();
       const localFilter = store.localPersonFilter();
+      const multipleFilter = store.multiplePersonFilter();
       let data = store.tableData();
 
       // Filter by role
@@ -27,11 +29,19 @@ export const DnaTableStore = signalStore(
         data = data.filter(row => row.role === 'child');
       }
 
-      // ✅ Apply local person filter (if set)
+      // ✅ Apply single person filter
       if (localFilter) {
         data = data.filter(row =>
           row.personId === localFilter ||
           row.relatedPersonId === localFilter
+        );
+      }
+
+      // ✅ Apply multiple person filter
+      if (multipleFilter && multipleFilter.length > 0) {
+        data = data.filter(row =>
+          multipleFilter.includes(row.personId) ||
+          (row.relatedPersonId && multipleFilter.includes(row.relatedPersonId))
         );
       }
 
@@ -58,6 +68,19 @@ export const DnaTableStore = signalStore(
 
       return null;
     }),
+
+    isSearching: computed(() => store.currentPersonFilter() !== null),
+
+    isLocalFiltering: computed(() => store.localPersonFilter() !== null),
+
+    isMultipleFiltering: computed(() => {
+      const filter = store.multiplePersonFilter();
+      return filter !== null && filter.length > 0;
+    }),
+
+    relatedPersonLabel: computed(() => {
+      return store.roleFilter() === 'parent' ? 'Child' : 'Parent';
+    }),
   })),
 
   withMethods((store) => {
@@ -69,7 +92,19 @@ export const DnaTableStore = signalStore(
       const rows: TableRowData[] = [];
 
       response.data.forEach(item => {
+        // ✅ Build parent row
         if (item.parent) {
+          // Collect all children (single or multiple)
+          const allChildren: PersonData[] = [];
+
+          if (item.child) {
+            allChildren.push(item.child);
+          }
+
+          if (item.children && item.children.length > 0) {
+            allChildren.push(...item.children);
+          }
+
           rows.push({
             id: item.id,
             personId: item.parent.id,
@@ -79,12 +114,20 @@ export const DnaTableStore = signalStore(
             file: item.file,
             loci_count: item.parent.loci_count,
             loci: item.parent.loci,
-            relatedPersonId: item.child?.id || null,
-            relatedPersonName: item.child?.name || null,
-            relatedPersonRole: item.child?.role || null,
+            // First child (backward compatibility)
+            relatedPersonId: allChildren[0]?.id || null,
+            relatedPersonName: allChildren[0]?.name || null,
+            relatedPersonRole: allChildren[0]?.role || null,
+            // ✅ All children
+            relatedPersons: allChildren.map(child => ({
+              id: child.id,
+              name: child.name,
+              role: child.role
+            }))
           });
         }
 
+        // ✅ Build child rows (single child)
         if (item.child) {
           rows.push({
             id: item.id,
@@ -98,6 +141,27 @@ export const DnaTableStore = signalStore(
             relatedPersonId: item.parent?.id || null,
             relatedPersonName: item.parent?.name || null,
             relatedPersonRole: item.parent?.role || null,
+            relatedPersons: null  // Children don't have multiple related persons
+          });
+        }
+
+        // ✅ Build child rows (multiple children)
+        if (item.children && item.children.length > 0) {
+          item.children.forEach(child => {
+            rows.push({
+              id: item.id,
+              personId: child.id,
+              uploaded_at: item.uploaded_at,
+              name: child.name,
+              role: child.role,
+              file: item.file,
+              loci_count: child.loci_count,
+              loci: child.loci,
+              relatedPersonId: item.parent?.id || null,
+              relatedPersonName: item.parent?.name || null,
+              relatedPersonRole: item.parent?.role || null,
+              relatedPersons: null  // Children don't have multiple related persons
+            });
           });
         }
       });
@@ -125,6 +189,14 @@ export const DnaTableStore = signalStore(
       // Check if row is expanded
       isRowExpanded(rowId: number): boolean {
         return store.expandedRowId() === rowId;
+      },
+
+      clearMultipleFilter() {
+        patchState(store, {
+          multiplePersonFilter: null,
+          expandedRowId: null,
+        });
+        notificationService.info('Multiple person filter cleared');
       },
 
       // ✅ Load table data (initial + pagination)
@@ -164,6 +236,18 @@ export const DnaTableStore = signalStore(
           })
         )
       ),
+
+      // ✅ LOCAL: Filter by multiple persons
+      filterByMultiplePersonsLocal(personIds: number[], personRole: string) {
+        const targetFilter = personRole === 'child' ? 'child' : 'parent';
+
+        patchState(store, {
+          roleFilter: targetFilter,
+          localPersonFilter: null,
+          multiplePersonFilter: personIds,  // ✅ New filter
+          expandedRowId: null,
+        });
+      },
 
       // ✅ LOCAL: Filter by person (no backend call)
       filterByPersonLocal(personId: number, personRole: string) {
@@ -307,16 +391,6 @@ export const DnaTableStore = signalStore(
           })
         )
       ),
-
-      // Check if backend searching
-      isSearching(): boolean {
-        return store.currentPersonFilter() !== null;
-      },
-
-      // Check if local filtering
-      isLocalFiltering(): boolean {
-        return store.localPersonFilter() !== null;
-      },
 
       // ✅ Method 1: Delete loci
       deleteLoci: rxMethod<{ row: TableRowData; locusIds: number[] }>(
@@ -538,11 +612,6 @@ export const DnaTableStore = signalStore(
       // Check if row is updating
       isRowUpdating(personId: number): boolean {
         return store.updatingRowId() === personId;
-      },
-
-      // Get related person label
-      getRelatedPersonLabel(): string {
-        return store.roleFilter() === 'parent' ? 'Child' : 'Parent';
       },
 
       // Add this method to withMethods()

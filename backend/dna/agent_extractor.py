@@ -241,7 +241,7 @@ class MultiAgentDNAExtractor:
                     return None
 
     def _normalize_extraction_result(self, raw_result: Dict[str, Any]) -> Dict[str, Any]:
-        """Convert 'people' array to parent/child format with correct role detection"""
+        """Convert 'people' array to parent/children format with correct role detection"""
         people = raw_result.get('people', [])
         people_with_data = [p for p in people if p.get('loci', [])]
 
@@ -253,7 +253,7 @@ class MultiAgentDNAExtractor:
 
         father_data = None
         mother_data = None
-        child_data = None
+        children_data = []  # ✅ Changed to list for multiple children
 
         # Extract people by role
         for person in people_with_data:
@@ -264,8 +264,9 @@ class MultiAgentDNAExtractor:
             elif 'mother' in role_label or 'мати' in role_label or 'мать' in role_label:
                 mother_data = person
             elif 'child' in role_label or 'дитина' in role_label or 'ребёнок' in role_label:
-                child_data = person
+                children_data.append(person)  # ✅ Add to list
 
+        # ✅ Determine parent and their actual role
         parent_data = None
         parent_role = 'unknown'
 
@@ -276,27 +277,32 @@ class MultiAgentDNAExtractor:
             parent_data = mother_data
             parent_role = 'mother'
         elif len(people_with_data) == 1:
-            # Only one person exists
+            # Only one person - could be parent or child
             parent_data = people_with_data[0]
-            # Determine role from Amelogenin
             parent_role = self._determine_role_from_amelogenin(parent_data)
         else:
+            # Check if we have only children (no parent)
+            if len(children_data) > 0 and not parent_data:
+                # Sibling test - no parent, only children
+                return {
+                    'success': True,
+                    'parent': None,
+                    'children': children_data,
+                    'parent_role': None,
+                    'raw_people': people
+                }
+
             return {
                 'success': False,
                 'error': 'Could not identify person roles in the document'
             }
 
-        if parent_data is None:
-            return {
-                'success': False,
-                'error': 'Could not identify parent information in the document'
-            }
-
+        # ✅ Return with multiple children support
         return {
             'success': True,
-            'parent': parent_data,  # ✅ Use 'parent' key instead of 'father'
-            'child': child_data or {'name': None, 'loci': []},
-            'parent_role': parent_role,  # ✅ Add parent_role ('father' or 'mother')
+            'parent': parent_data,
+            'children': children_data,  # ✅ List of children (can be 0, 1, or more)
+            'parent_role': parent_role,
             'raw_people': people
         }
 
@@ -323,19 +329,24 @@ class MultiAgentDNAExtractor:
         return 'unknown'
 
     def _count_total_loci(self, data: Dict[str, Any]) -> int:
-        """Count total loci"""
+        """Count total loci - supports multiple children"""
         count = 0
 
-        if data.get('parent') and isinstance(data['parent'].get('loci'), list):
-            count += len(data['parent']['loci'])
+        # Count parent loci
+        parent_data = data.get('parent')
+        if parent_data and isinstance(parent_data.get('loci'), list):
+            count += len(parent_data['loci'])
 
-        if data.get('child') and isinstance(data['child'].get('loci'), list):
-            count += len(data['child']['loci'])
+        # ✅ Count all children loci
+        children_data = data.get('children', [])
+        for child in children_data:
+            if isinstance(child.get('loci'), list):
+                count += len(child['loci'])
 
         return count
 
     def _validate_extraction(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        """Final validation"""
+        """Final validation - supports multiple children"""
         issues = []
         score = 1.0
 
@@ -348,16 +359,15 @@ class MultiAgentDNAExtractor:
                 'parent_role': 'unknown'
             }
 
-        # ✅ FIXED: Get parent data correctly
         parent_data = result.get('parent', {})
-        parent_loci = parent_data.get('loci', [])
-        parent_role = result.get('parent_role', 'unknown')  # ✅ Get actual role
+        parent_loci = parent_data.get('loci', []) if parent_data else []
+        parent_role = result.get('parent_role', 'unknown')
 
-        child_data = result.get('child', {})
-        child_loci = child_data.get('loci', [])
+        # ✅ Support multiple children
+        children_data = result.get('children', [])
 
         # Check completeness
-        if len(parent_loci) == 0 and len(child_loci) == 0:
+        if len(parent_loci) == 0 and len(children_data) == 0:
             issues.append("No data extracted")
             score = 0.0
 
@@ -365,20 +375,32 @@ class MultiAgentDNAExtractor:
             issues.append(f"Parent has only {len(parent_loci)} loci")
             score -= 0.2
 
-        if len(child_loci) > 0 and len(child_loci) < 10:
-            issues.append(f"Child has only {len(child_loci)} loci")
-            score -= 0.3
+        # ✅ Validate each child
+        for idx, child_data in enumerate(children_data):
+            child_loci = child_data.get('loci', [])
+            if len(child_loci) > 0 and len(child_loci) < 10:
+                child_name = child_data.get('name', f'Child {idx + 1}')
+                issues.append(f"{child_name} has only {len(child_loci)} loci")
+                score -= 0.3
 
-        # Check for duplicates
-        for person_name, person_loci in [('parent', parent_loci), ('child', child_loci)]:
-            if len(person_loci) == 0:
-                continue
-
-            locus_names = [l.get('locus_name') for l in person_loci]
+        # Check for duplicates in parent
+        if len(parent_loci) > 0:
+            locus_names = [l.get('locus_name') for l in parent_loci]
             duplicates = [name for name in set(locus_names) if locus_names.count(name) > 1]
             if duplicates:
-                issues.append(f"{person_name.capitalize()} has duplicates: {', '.join(duplicates)}")
+                issues.append(f"Parent has duplicates: {', '.join(duplicates)}")
                 score -= 0.1
+
+        # ✅ Check duplicates in each child
+        for idx, child_data in enumerate(children_data):
+            child_loci = child_data.get('loci', [])
+            if len(child_loci) > 0:
+                child_name = child_data.get('name', f'Child {idx + 1}')
+                locus_names = [l.get('locus_name') for l in child_loci]
+                duplicates = [name for name in set(locus_names) if locus_names.count(name) > 1]
+                if duplicates:
+                    issues.append(f"{child_name} has duplicates: {', '.join(duplicates)}")
+                    score -= 0.1
 
         score = max(0.0, min(1.0, score))
         is_valid = score >= 0.7

@@ -42,6 +42,7 @@ class DNADataResponse(BaseModel):
     overall_confidence: float = 1.0
     parent: Optional[PersonData] = None
     child: Optional[PersonData] = None
+    children: Optional[List[PersonData]] = None
 
     class Config:
         from_attributes = True

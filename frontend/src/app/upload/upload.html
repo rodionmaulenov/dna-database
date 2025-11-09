@@ -27,17 +27,39 @@
     </div>
 
     <!-- ⭐ Active Filter Chip -->
-    @if (tableStore.currentPersonFilter()) {
       <mat-chip-set>
-        <mat-chip highlighted (removed)="clearFilter()">
-          <mat-icon matChipAvatar>person</mat-icon>
-          {{ tableStore.filteredPersonName() }}
-          <button matChipRemove>
-            <mat-icon>cancel</mat-icon>
-          </button>
-        </mat-chip>
+        @if (tableStore.isLocalFiltering()) {
+          <mat-chip (removed)="clearLocalFilter()">
+            <mat-icon matChipAvatar>filter_list</mat-icon>
+            Viewing: {{ tableStore.filteredPersonName() }}
+            <button matChipRemove>
+              <mat-icon>cancel</mat-icon>
+            </button>
+          </mat-chip>
+        }
+
+        <!-- ⭐ Backend Search Chip (from match results or table search) -->
+        @if (tableStore.isSearching()) {
+          <mat-chip highlighted (removed)="clearSearch()">
+            <mat-icon matChipAvatar>search</mat-icon>
+            Searching: {{ tableStore.filteredPersonName() }}
+            <button matChipRemove>
+              <mat-icon>cancel</mat-icon>
+            </button>
+          </mat-chip>
+        }
+
+        <!-- ⭐ Multiple Persons Filter Chip -->
+        @if (tableStore.isMultipleFiltering()) {
+          <mat-chip (removed)="clearMultipleFilter()">
+            <mat-icon matChipAvatar>group</mat-icon>
+            Viewing: {{ tableStore.multiplePersonFilter()?.length }} persons
+            <button matChipRemove>
+              <mat-icon>cancel</mat-icon>
+            </button>
+          </mat-chip>
+        }
       </mat-chip-set>
-    }
 
   </div>
 

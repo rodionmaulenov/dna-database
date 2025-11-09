@@ -6,6 +6,7 @@ export interface DNADataResponse {
   uploaded_at: string;
   parent: PersonData | null;
   child: PersonData | null;
+  children: PersonData[] | null;
 }
 
 export interface DNADataListResponse {
@@ -28,6 +29,11 @@ export interface TableRowData {
   relatedPersonId: number | null; // ID of child (if parent) or parent (if child)
   relatedPersonName: string | null; // Name of child (if parent) or parent (if child)
   relatedPersonRole: string | null;
+  relatedPersons: Array<{
+    id: number;
+    name: string;
+    role: string;
+  }> | null;
 }
 
 interface DnaTableState {
@@ -38,6 +44,7 @@ interface DnaTableState {
   totalRecords: number;
   currentPersonFilter: number | null;
   localPersonFilter: number | null;
+  multiplePersonFilter: number[] | null;
   roleFilter: 'parent' | 'child';
   expandedRowId: number | null;
   updatingRowId: number | null;
@@ -47,10 +54,11 @@ export const initialState: DnaTableState = {
   tableData: [],
   loading: false,
   currentPage: 1,
-  pageSize: 50,
+  pageSize: 20,
   totalRecords: 0,
   currentPersonFilter: null,
   localPersonFilter: null,
+  multiplePersonFilter: null,
   roleFilter: 'parent',
   expandedRowId: null,
   updatingRowId: null,

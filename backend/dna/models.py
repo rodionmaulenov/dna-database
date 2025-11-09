@@ -22,7 +22,6 @@ class Person(models.Model):
     loci_count = models.IntegerField(default=0, help_text="Number of analyzed loci")
 
     class Meta:
-        unique_together = ['uploaded_file', 'role']
         indexes = [
             models.Index(fields=['role']),
         ]

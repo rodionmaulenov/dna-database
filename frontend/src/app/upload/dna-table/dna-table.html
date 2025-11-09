@@ -95,15 +95,19 @@
         <ng-container matColumnDef="related_person">
           <th mat-header-cell *matHeaderCellDef>
             <div class="header-icon-alignment">
-              <span>{{ store.getRelatedPersonLabel() }}</span>
+              <span>{{ store.relatedPersonLabel() }}</span>
               <mat-icon class="header-icon-size">filter_alt</mat-icon>
             </div>
           </th>
           <td mat-cell *matCellDef="let element" (click)="$event.stopPropagation()">
-            @if (element.relatedPersonName && element.relatedPersonId) {
+            @if (element.relatedPersons && element.relatedPersons.length > 1) {
+              <span (click)="filterByMultiplePersons(element.relatedPersons)" class="person-link">
+                {{ element.relatedPersons.length }}
+              </span>
+            } @else if (element.relatedPersonName && element.relatedPersonId) {
               <span (click)="filterByPerson(element.relatedPersonId, element.relatedPersonRole)"
                     class="person-link">
-                  {{ element.relatedPersonName }}
+                {{ element.relatedPersonName }}
               </span>
             } @else {
               <span>-</span>
@@ -206,7 +210,7 @@
                       </mat-form-field>
 
                       <button mat-icon-button
-                              (click)="cancelAddLocus(element); $event.stopPropagation()"
+                              (click)="cancelAddLocus(); $event.stopPropagation()"
                               matTooltip="Cancel">
                         <mat-icon>close</mat-icon>
                       </button>

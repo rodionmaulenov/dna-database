@@ -134,12 +134,6 @@ Extract: Child (1 person)
 Gender: Amelogenin X,Y = male child, X,X = female child
 ```
 
-**SUMMARY PRIORITY:**
-1. Father is ALWAYS preferred over Mother when both exist
-2. Extract ALL children found in the document
-3. If no Child, extract only Father (never Mother alone when Father exists)
-4. Multiple children are common in paternity/maternity tests - extract ALL of them
-
 **CASE H: Parent + Multiple Children - Multiple child columns with data**
 ```
 Extract: Parent + ALL Children (2+ people)
@@ -181,6 +175,14 @@ Example table:
 Extract: Father + Child 1 + Child 2 (3 people)
 Skip: Mother
 ```
+
+**SUMMARY PRIORITY:**
+1. Father is ALWAYS preferred over Mother when both exist
+2. Extract ALL children found in the document
+3. Extract Child with whichever parent is available (or all children if no parent)
+4. If no Child, extract only Father (never Mother alone when Father exists)
+5. Multiple children are common in paternity/maternity tests - extract ALL of them
+
 ---
 
 🚨 CRITICAL RULE #4: NAME AND ROLE EXTRACTION
@@ -532,13 +534,28 @@ Handle microvariants and European notation:
         {"locus_name": "Amelogenin", "allele_1": "X", "allele_2": "Y", "allele_1_confidence": 1.0, "allele_2_confidence": 1.0},
         {"locus_name": "Y indel", "allele_1": "2", "allele_2": null, "allele_1_confidence": 1.0, "allele_2_confidence": 1.0}
       ]
+    },
+    // ✅ MULTIPLE CHILDREN EXAMPLE:
+    {
+      "role_label": "Child",
+      "name": "Jane Doe",
+      "loci": [ ... ]
+    },
+    {
+      "role_label": "Child",
+      "name": "Jake Doe",
+      "loci": [ ... ]
     }
-    // ... more people ONLY if they meet extraction criteria ...
+    // ... extract ALL people that meet extraction criteria ...
   ],
   "overall_quality": 1.0
 }
 ```
 
+**IMPORTANT:** 
+- If document has multiple children, include ALL children in the "people" array
+- Each child should have role_label="Child" and their own loci data
+- Do NOT limit to only 2 people if there are 3+ people in the document
 ---
 
 🔴 PRE-FLIGHT CHECKLIST:

@@ -219,21 +219,7 @@ def save_dna_extraction_to_database(
 ) -> Dict[str, Any]:
     """
     Save DNA extraction result to database with validation
-    Then upload to S3 if all validations pass
-
-    Workflow:
-    1. Validate data (duplicate check, confidence, loci count)
-    2. If validation passes → Upload to S3 → Save to database → Delete local file
-    3. If validation fails → Return errors (file NOT uploaded to S3)
-
-    Args:
-        extraction_result: Extraction result from AI
-        filename: Original filename
-        local_file_path: LOCAL path to the file for S3 upload
-        expected_role: Expected role from user ('father', 'mother', or 'child')
-
-    Returns:
-        Dict with success, errors
+    Supports: Parent only, Parent + 1 child, Parent + multiple children
     """
     errors = []
 
@@ -256,20 +242,26 @@ def save_dna_extraction_to_database(
 
         # === STEP 2: Extract Data ===
         parent_data = extraction_result.get('parent') or extraction_result.get('father', {})
-        child_data = extraction_result.get('child', {})
         parent_role = extraction_result.get('parent_role', 'unknown')
 
+        # ✅ Support both old format (single child) and new format (multiple children)
+        children_data = extraction_result.get('children', [])
+        if not children_data:
+            # Backward compatibility: check for single 'child' key
+            single_child = extraction_result.get('child')
+            if single_child and single_child.get('loci'):
+                children_data = [single_child]
+
         parent_loci = parent_data.get('loci', []) if parent_data else []
-        child_loci = child_data.get('loci', []) if child_data else []
 
         # === STEP 3: Determine What We Have ===
         has_parent = bool(parent_loci)
-        has_child = bool(child_loci)
+        has_children = len(children_data) > 0
 
-        logger.info(f"Data structure: has_parent={has_parent}, has_child={has_child}")
+        logger.info(f"Data structure: has_parent={has_parent}, children_count={len(children_data)}")
 
         # Check if we have ANY data
-        if not has_parent and not has_child:
+        if not has_parent and not has_children:
             logger.error(f"No DNA data in {filename}")
             return {
                 'success': False,
@@ -278,23 +270,28 @@ def save_dna_extraction_to_database(
 
         # === STEP 4: Validate Loci Counts ===
         valid_parent_count = _count_valid_loci(parent_loci) if has_parent else 0
-        valid_child_count = _count_valid_loci(child_loci) if has_child else 0
 
-        logger.info(f"Valid loci counts: parent={valid_parent_count}, child={valid_child_count}")
+        logger.info(f"Valid parent loci: {valid_parent_count}")
 
-        # Minimum loci validation
+        # Validate each child
+        for idx, child_data in enumerate(children_data):
+            child_loci = child_data.get('loci', [])
+            valid_child_count = _count_valid_loci(child_loci)
+            logger.info(f"Valid child {idx + 1} loci: {valid_child_count}")
+
+            if valid_child_count < 10:
+                logger.error(f"Only {valid_child_count} loci for child {idx + 1} in {filename}")
+                return {
+                    'success': False,
+                    'errors': [f"Insufficient child {idx + 1} data ({valid_child_count} loci). Need at least 10 loci."],
+                }
+
+        # Minimum loci validation for parent
         if has_parent and valid_parent_count < 10:
             logger.error(f"Only {valid_parent_count} parent loci in {filename}")
             return {
                 'success': False,
                 'errors': [f"Insufficient parent data ({valid_parent_count} loci). Need at least 10 loci."],
-            }
-
-        if has_child and valid_child_count < 10:
-            logger.error(f"Only {valid_child_count} child loci in {filename}")
-            return {
-                'success': False,
-                'errors': [f"Insufficient child data ({valid_child_count} loci). Need at least 10 loci."],
             }
 
         # === STEP 6: Check AI Confidence ===
@@ -328,33 +325,37 @@ def save_dna_extraction_to_database(
                     f"Please re-upload better quality PDF."
                 )
 
-        if has_child:
-            child_low_confidence = []
-            for locus in child_loci:
-                locus_name = locus.get('locus_name')
-                if locus_name and locus_name.lower() in GENDER_MARKERS:
-                    continue
+        # ✅ Check confidence for each child
+        if has_children:
+            for idx, child_data in enumerate(children_data):
+                child_loci = child_data.get('loci', [])
+                child_low_confidence = []
 
-                # Skip empty loci
-                if locus.get('allele_1') is None or locus.get('allele_2') is None:
-                    continue
+                for locus in child_loci:
+                    locus_name = locus.get('locus_name')
+                    if locus_name and locus_name.lower() in GENDER_MARKERS:
+                        continue
 
-                # Get confidence safely
-                allele_1_confidence = _safe_confidence(locus.get('allele_1_confidence'))
-                allele_2_confidence = _safe_confidence(locus.get('allele_2_confidence'))
+                    # Skip empty loci
+                    if locus.get('allele_1') is None or locus.get('allele_2') is None:
+                        continue
 
-                # Safe minimum
-                min_confidence = _safe_min(allele_1_confidence, allele_2_confidence)
+                    # Get confidence safely
+                    allele_1_confidence = _safe_confidence(locus.get('allele_1_confidence'))
+                    allele_2_confidence = _safe_confidence(locus.get('allele_2_confidence'))
 
-                if min_confidence < confidence_threshold:
-                    child_low_confidence.append(locus_name)
+                    # Safe minimum
+                    min_confidence = _safe_min(allele_1_confidence, allele_2_confidence)
 
-            if child_low_confidence:
-                logger.error(f"Low confidence child extraction in {filename}: {child_low_confidence}")
-                errors.append(
-                    f"AI couldn't read child data clearly: {', '.join(child_low_confidence)}. "
-                    f"Please re-upload better quality PDF."
-                )
+                    if min_confidence < confidence_threshold:
+                        child_low_confidence.append(locus_name)
+
+                if child_low_confidence:
+                    logger.error(f"Low confidence child {idx + 1} extraction in {filename}: {child_low_confidence}")
+                    errors.append(
+                        f"AI couldn't read child {idx + 1} data clearly: {', '.join(child_low_confidence)}. "
+                        f"Please re-upload better quality PDF."
+                    )
 
         # === STEP 7: Check Overall Quality ===
         overall_quality = extraction_result.get('overall_quality', 1.0)
@@ -372,17 +373,17 @@ def save_dna_extraction_to_database(
 
         # === STEP 9: Check Names ===
         parent_name = None
-        child_name = None
 
         if has_parent:
             parent_name = (parent_data.get('name') or '').strip() or 'Unknown'
             if parent_name == 'Unknown':
                 logger.warning(f"Parent name missing in file: {filename}")
 
-        if has_child:
-            child_name = (child_data.get('name') or '').strip() or 'Unknown'
-            if child_name == 'Unknown':
-                logger.warning(f"Child name missing in file: {filename}")
+        # ✅ Check names for all children
+        for idx, child_data in enumerate(children_data):
+            child_name = (child_data.get('name') or '').strip()
+            if not child_name:
+                logger.warning(f"Child {idx + 1} name missing in file: {filename}")
 
         # === STOP HERE IF ERRORS ===
         if errors:
@@ -424,24 +425,27 @@ def save_dna_extraction_to_database(
 
             parent_person = None
             parent_saved_count = 0
-            child_person = None
-            child_saved_count = 0
+            children_saved = []  # ✅ Track all saved children
 
             # Save parent (if exists)
             if has_parent:
+                # ✅ Determine parent role properly
                 if parent_role == 'unknown':
-                    # Try to determine from role_label in parent_data
+                    # Try to get role from role_label
                     role_label = (parent_data.get('role_label', '') or '').lower()
 
                     if 'mother' in role_label or 'мати' in role_label or 'мать' in role_label:
                         parent_role = 'mother'
+                        logger.info(f"✅ Determined parent role: Mother (from role_label)")
                     elif 'father' in role_label or 'батько' in role_label or 'отец' in role_label:
                         parent_role = 'father'
+                        logger.info(f"✅ Determined parent role: Father (from role_label)")
                     else:
-                        # Last resort: Check Amelogenin
-                        parent_loci = parent_data.get('loci', [])
-                        amelogenin = next((l for l in parent_loci if l.get('locus_name', '').lower() == 'amelogenin'),
-                                          None)
+                        # Check Amelogenin to determine gender
+                        amelogenin = next(
+                            (l for l in parent_loci if l.get('locus_name', '').lower() == 'amelogenin'),
+                            None
+                        )
 
                         if amelogenin:
                             allele_1 = str(amelogenin.get('allele_1', '')).upper()
@@ -451,12 +455,14 @@ def save_dna_extraction_to_database(
                             # X, X = Female = Mother
                             if 'Y' in [allele_1, allele_2]:
                                 parent_role = 'father'
+                                logger.info(f"✅ Determined parent role: Father (Amelogenin: {allele_1}, {allele_2})")
                             else:
                                 parent_role = 'mother'
+                                logger.info(f"✅ Determined parent role: Mother (Amelogenin: {allele_1}, {allele_2})")
                         else:
                             # Default to father if can't determine
                             parent_role = 'father'
-                            logger.warning(f"Cannot determine parent gender in {filename}, defaulting to father")
+                            logger.warning(f"⚠️ Cannot determine parent gender in {filename}, defaulting to father")
 
                 parent_person = Person.objects.create(
                     uploaded_file=uploaded_file,
@@ -476,33 +482,43 @@ def save_dna_extraction_to_database(
                 parent_person.save()
 
                 logger.info(
-                    f"Saved {parent_name} ({parent_role}) "
+                    f"✅ Saved {parent_name} ({parent_role}) "
                     f"with {parent_saved_count} STR loci"
                 )
 
-            # Save child (if exists)
-            if has_child:
-                child_person = Person.objects.create(
-                    uploaded_file=uploaded_file,
-                    role='child',
-                    name=child_name,
-                    loci_count=0
-                )
+            # ✅ Save ALL children (if exist)
+            if has_children:
+                for idx, child_data in enumerate(children_data):
+                    child_name = (child_data.get('name') or '').strip() or f'Unknown Child {idx + 1}'
+                    child_loci = child_data.get('loci', [])
 
-                child_saved_count = _save_person_loci(
-                    person=child_person,
-                    loci_data=child_loci,
-                    filename=filename,
-                    errors=errors
-                )
+                    child_person = Person.objects.create(
+                        uploaded_file=uploaded_file,
+                        role='child',
+                        name=child_name,
+                        loci_count=0
+                    )
 
-                child_person.loci_count = child_saved_count
-                child_person.save()
+                    child_saved_count = _save_person_loci(
+                        person=child_person,
+                        loci_data=child_loci,
+                        filename=filename,
+                        errors=errors
+                    )
 
-                logger.info(
-                    f"Saved {child_name} (child) "
-                    f"with {child_saved_count} STR loci"
-                )
+                    child_person.loci_count = child_saved_count
+                    child_person.save()
+
+                    children_saved.append({
+                        'id': child_person.id,
+                        'name': child_name,
+                        'loci_count': child_saved_count
+                    })
+
+                    logger.info(
+                        f"✅ Saved {child_name} (child {idx + 1}) "
+                        f"with {child_saved_count} STR loci"
+                    )
 
             # Check for errors during loci save
             if errors:
@@ -518,12 +534,13 @@ def save_dna_extraction_to_database(
             # ✅ THIRD: Everything saved successfully - clean up temp file
             _cleanup_temp_file(local_file_path)
 
-            # Build success message
+            # ✅ Build success message
             saved_info = []
             if has_parent:
                 saved_info.append(f"Parent {parent_person.id} ({parent_saved_count} loci)")
-            if has_child:
-                saved_info.append(f"Child {child_person.id} ({child_saved_count} loci)")
+            if has_children:
+                for child in children_saved:
+                    saved_info.append(f"Child {child['id']} ({child['loci_count']} loci)")
 
             logger.info(
                 f"✅ Successfully saved {filename}: "
@@ -545,7 +562,6 @@ def save_dna_extraction_to_database(
             'success': False,
             'errors': ["Server error occurred"],
         }
-
 
 def _cleanup_temp_file(file_path: str):
     """Helper to safely delete temp file"""

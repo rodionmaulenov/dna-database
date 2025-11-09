@@ -84,7 +84,7 @@ export class DnaTable implements OnInit {
     return this.store.isRowUpdating(row.personId);
   }
 
-  private collectUpdates(form: FormGroup, row: TableRowData) {
+  private collectUpdates(form: FormGroup) {
     let nameUpdate: string | undefined;
     let roleUpdate: string | undefined;
     const lociUpdates: LociUpdate[] = [];
@@ -128,7 +128,7 @@ export class DnaTable implements OnInit {
     const form = this.formService.getRowForm(row);
     const deletedLociIds = this.deletedLoci.get(row.personId) || [];
 
-    const { nameUpdate, roleUpdate, lociUpdates } = this.collectUpdates(form, row);
+    const { nameUpdate, roleUpdate, lociUpdates } = this.collectUpdates(form);
 
     if (nameUpdate || roleUpdate || lociUpdates.length > 0 || deletedLociIds.length > 0) {
       this.store.updateRow({ row, nameUpdate, roleUpdate, lociUpdates, deletedLociIds });
@@ -156,7 +156,7 @@ export class DnaTable implements OnInit {
   }
 
   // ✅ Cancel adding
-  cancelAddLocus(row: TableRowData) {
+  cancelAddLocus() {
     this.addingLocusRowId = null;
     this.selectedLocusName = '';
   }
@@ -230,6 +230,14 @@ export class DnaTable implements OnInit {
         this.store.deleteRecord(row.id);
       }
     });
+  }
+
+  filterByMultiplePersons(persons: Array<{ id: number; name: string; role: string }>) {
+    // Get all person IDs
+    const personIds = persons.map(p => p.id);
+
+    // Filter locally to show only these persons
+    this.store.filterByMultiplePersonsLocal(personIds, persons[0].role);
   }
 
   // ✅ LOCAL: Click related person in table (no backend call)

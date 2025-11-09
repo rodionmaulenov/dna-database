@@ -198,178 +198,96 @@ def get_all_dna_data(
 ):
     """
     Get DNA data with signed download URLs
+    Paginated by person (table rows), not by uploads
     """
     try:
-        uploads_query = UploadedFile.objects.prefetch_related(
-            'persons',
-            'persons__loci'
-        )
+        # ✅ Query persons directly, not uploads
+        persons_query = Person.objects.select_related('uploaded_file').prefetch_related('loci')
 
         if person_id:
-            uploads_query = uploads_query.filter(
-                persons__id=person_id
+            # Filter by specific person OR their related persons in same upload
+            persons_query = persons_query.filter(
+                uploaded_file__persons__id=person_id
             ).distinct()
 
-        total_count = uploads_query.count()
+        # ✅ Order by upload date and role for consistent results
+        persons_query = persons_query.order_by('-uploaded_file__uploaded_at', 'role', 'id')
+
+        # ✅ Paginate persons (rows), not uploads
+        total_count = persons_query.count()
         start = (page - 1) * page_size
         end = start + page_size
 
-        uploads = uploads_query[start:end]
+        persons = persons_query[start:end]
 
+        # ✅ Build result with upload grouping
         result = []
+        processed_uploads = set()  # Track which uploads we've already added
 
-        for upload in uploads:
-            persons = upload.persons.all()
+        for person in persons:
+            upload = person.uploaded_file
 
-            # ✅ Generate signed URL
+            # Skip if we already processed this upload
+            if upload.id in processed_uploads:
+                continue
+
+            processed_uploads.add(upload.id)
+
+            # Get all persons for this upload
+            all_persons = upload.persons.all()
+            parent = all_persons.filter(role__in=['father', 'mother']).first()
+            children = all_persons.filter(role='child')
+
+            # Generate signed URL
             file_url = _generate_file_url(upload.file.name if upload.file else '')
 
-            if person_id:
-                matching_person = persons.filter(id=person_id).first()
+            # Build parent data
+            parent_data = None
+            if parent:
+                parent_loci = list(parent.loci.all())
+                parent_data = PersonData(
+                    id=parent.id,
+                    role=parent.role,
+                    name=parent.name,
+                    loci_count=parent.loci_count,
+                    loci=[
+                        LocusData(
+                            id=locus.id,
+                            locus_name=locus.locus_name,
+                            allele_1=locus.allele_1,
+                            allele_2=locus.allele_2,
+                        ) for locus in parent_loci
+                    ]
+                )
 
-                if not matching_person:
-                    continue
-
-                if matching_person.role in ['father', 'mother']:
-                    parent = matching_person
-                    child = persons.filter(role='child').first()
-
-                    parent_loci = list(parent.loci.all())
-                    parent_data = PersonData(
-                        id=parent.id,
-                        role=parent.role,
-                        name=parent.name,
-                        loci_count=parent.loci_count,
-                        loci=[
-                            LocusData(
-                                id=locus.id,
-                                locus_name=locus.locus_name,
-                                allele_1=locus.allele_1,
-                                allele_2=locus.allele_2,
-                            ) for locus in parent_loci
-                        ]
-                    )
-
-                    child_data = None
-                    if child:
-                        child_loci = list(child.loci.all())
-                        child_data = PersonData(
-                            id=child.id,
-                            role=child.role,
-                            name=child.name,
-                            loci_count=child.loci_count,
-                            loci=[
-                                LocusData(
-                                    id=locus.id,
-                                    locus_name=locus.locus_name,
-                                    allele_1=locus.allele_1,
-                                    allele_2=locus.allele_2,
-                                ) for locus in child_loci
-                            ]
-                        )
-
-                    result.append(DNADataResponse(
-                        id=upload.id,
-                        file=file_url,
-                        uploaded_at=upload.uploaded_at.isoformat(),
-                        parent=parent_data,
-                        child=child_data
-                    ))
-
-                else:  # child
-                    child = matching_person
-                    parent = persons.filter(role__in=['father', 'mother']).first()
-
-                    child_loci = list(child.loci.all())
-                    child_data = PersonData(
-                        id=child.id,
-                        role=child.role,
-                        name=child.name,
-                        loci_count=child.loci_count,
-                        loci=[
-                            LocusData(
-                                id=locus.id,
-                                locus_name=locus.locus_name,
-                                allele_1=locus.allele_1,
-                                allele_2=locus.allele_2,
-                            ) for locus in child_loci
-                        ]
-                    )
-
-                    parent_data = None
-                    if parent:
-                        parent_loci = list(parent.loci.all())
-                        parent_data = PersonData(
-                            id=parent.id,
-                            role=parent.role,
-                            name=parent.name,
-                            loci_count=parent.loci_count,
-                            loci=[
-                                LocusData(
-                                    id=locus.id,
-                                    locus_name=locus.locus_name,
-                                    allele_1=locus.allele_1,
-                                    allele_2=locus.allele_2,
-                                ) for locus in parent_loci
-                            ]
-                        )
-
-                    result.append(DNADataResponse(
-                        id=upload.id,
-                        file=file_url,
-                        uploaded_at=upload.uploaded_at.isoformat(),
-                        parent=parent_data,
-                        child=child_data
-                    ))
-
-            else:
-                # No filter
-                parent = persons.filter(role__in=['father', 'mother']).first()
-                child = persons.filter(role='child').first()
-
-                parent_data = None
-                if parent:
-                    parent_loci = list(parent.loci.all())
-                    parent_data = PersonData(
-                        id=parent.id,
-                        role=parent.role,
-                        name=parent.name,
-                        loci_count=parent.loci_count,
-                        loci=[
-                            LocusData(
-                                id=locus.id,
-                                locus_name=locus.locus_name,
-                                allele_1=locus.allele_1,
-                                allele_2=locus.allele_2,
-                            ) for locus in parent_loci
-                        ]
-                    )
-
-                child_data = None
-                if child:
-                    child_loci = list(child.loci.all())
-                    child_data = PersonData(
-                        id=child.id,
-                        role=child.role,
-                        name=child.name,
-                        loci_count=child.loci_count,
-                        loci=[
-                            LocusData(
-                                id=locus.id,
-                                locus_name=locus.locus_name,
-                                allele_1=locus.allele_1,
-                                allele_2=locus.allele_2,
-                            ) for locus in child_loci
-                        ]
-                    )
-
-                result.append(DNADataResponse(
-                    id=upload.id,
-                    file=file_url,
-                    uploaded_at=upload.uploaded_at.isoformat(),
-                    parent=parent_data,
-                    child=child_data
+            # ✅ Build children data (multiple children support)
+            children_data = []
+            for child in children:
+                child_loci = list(child.loci.all())
+                children_data.append(PersonData(
+                    id=child.id,
+                    role=child.role,
+                    name=child.name,
+                    loci_count=child.loci_count,
+                    loci=[
+                        LocusData(
+                            id=locus.id,
+                            locus_name=locus.locus_name,
+                            allele_1=locus.allele_1,
+                            allele_2=locus.allele_2,
+                        ) for locus in child_loci
+                    ]
                 ))
+
+            # ✅ Create one response per upload (not per person)
+            result.append(DNADataResponse(
+                id=upload.id,
+                file=file_url,
+                uploaded_at=upload.uploaded_at.isoformat(),
+                parent=parent_data,
+                child=children_data[0] if len(children_data) == 1 else None,  # Single child (backward compat)
+                children=children_data if len(children_data) > 1 else None,  # Multiple children
+            ))
 
         return DNADataListResponse(
             data=result,
