@@ -3,7 +3,6 @@ import os
 import re
 
 from typing import Optional
-from celery.result import AsyncResult
 
 from django.core.files.storage import default_storage
 from django.conf import settings
@@ -71,49 +70,7 @@ def _generate_file_url(file_path: str) -> str:
         return file_path  # Fallback to path
 
 
-@upload_router.get('task/{task_id}/', response={200: dict})
-def get_task_status(request, task_id: str):
-    """
-    Check status of a Celery task
-    """
-    try:
-        task = AsyncResult(task_id)
-
-        if task.ready():
-            # Task completed
-            result = task.get()
-
-            return 200, {
-                'status': 'completed',
-                'success': result.get('success', False),
-                'errors': result.get('errors', []),
-                'uploaded_file_id': result.get('uploaded_file_id'),
-            }
-        elif task.failed():
-            # Task failed
-            return 200, {
-                'status': 'failed',
-                'success': False,
-                'errors': ['Processing failed'],
-            }
-        else:
-            # Task still running
-            return 200, {
-                'status': 'processing',
-                'success': None,
-                'message': 'File is being processed...',
-            }
-
-    except Exception as e:
-        logger.error(f"Failed to get task status for {task_id}: {e}")
-        return 200, {
-            'status': 'error',
-            'success': False,
-            'errors': ['Failed to check task status'],
-        }
-
-
-@upload_router.post('file/', response={200: FileUploadResponse, 202: FileUploadResponse, 400: FileUploadResponse})
+@upload_router.post('file/', response={200: FileUploadResponse, 400: FileUploadResponse})
 def upload_files(request, file: File[NinjaUploadedFile]):
     try:
         if not file.content_type == 'application/pdf':
@@ -136,19 +93,27 @@ def upload_files(request, file: File[NinjaUploadedFile]):
 
         logger.info(f"✅ Saved locally for processing: {local_file_path}")
 
-        # ✅ Start async task (don't wait for result!)
-        task = process_file_upload.apply_async(
+        result = process_file_upload.apply_async(
             args=[local_file_path, file.name]
         )
 
-        # ✅ Return immediately with task ID
-        logger.info(f"Started async task {task.id} for {file.name}")
-        return 202, FileUploadResponse(
-            success=True,
-            errors=None,
-            task_id=task.id,  # ✅ Return task ID for polling
-            message="Processing started"
-        )
+        # # Clean up temp file
+        if os.path.exists(local_file_path):
+            os.remove(local_file_path)
+            logger.info(f"Cleaned up temporary file: {local_file_path}")
+
+        if result.get('success'):
+            logger.info(f"Successfully processed: {file.name}")
+            return 200, FileUploadResponse(
+                success=True,
+                errors=None,
+            )
+        else:
+            logger.error(f"Processing failed for {file.name}: {result.get('errors')}")
+            return 400, FileUploadResponse(
+                success=False,
+                errors=result.get('errors', []),
+            )
 
     except Exception as e:
         logger.error(f"upload_files view error for {file.name}: {e}", exc_info=True)

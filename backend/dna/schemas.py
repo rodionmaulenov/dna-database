@@ -30,8 +30,6 @@ class FileUploadResponse(BaseModel):
     success: bool
     errors: Optional[List[str]] = Field(default=None)
     top_matches: Optional[List[MatchResult]] = Field(default=None)
-    task_id: Optional[str] = None
-    message: Optional[str] = None
 
     class Config:
         from_attributes = True
