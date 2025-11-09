@@ -47,37 +47,62 @@
   background: white;
 }
 
+//.table-scroll-container {
+//  position: relative;
+//  display: flex;
+//  justify-content: space-between;
+//  flex-direction: column;
+//  min-height: 200px;
+//  max-height: 700px;
+//  border: 1px solid #e0e0e0;
+//  border-radius: 16px 16px 0 0;
+//  overflow: auto;
+//
+//
+//  // ⭐ Tablet (landscape and portrait)
+//  @media (max-width: 1024px) {
+//    height: 70vh;
+//    max-height: 70vh;
+//  }
+//
+//  // ⭐ Mobile (large phones)
+//  @media (max-width: 768px) {
+//    height: 60vh;
+//    max-height: 60vh;
+//  }
+//
+//  // ⭐ Mobile (small phones)
+//  @media (max-width: 480px) {
+//    height: 50vh;
+//    max-height: 50vh;
+//    min-height: 300px;
+//  }
+//
+//}
+
 .table-scroll-container {
   position: relative;
   display: flex;
-  justify-content: space-between;
   flex-direction: column;
-  min-height: 200px;
-  max-height: 700px;
+  height: 700px; // ✅ Fixed height required for virtual scrolling
   border: 1px solid #e0e0e0;
   border-radius: 16px 16px 0 0;
-  overflow: auto;
-
 
   // ⭐ Tablet (landscape and portrait)
   @media (max-width: 1024px) {
     height: 70vh;
-    max-height: 70vh;
   }
 
   // ⭐ Mobile (large phones)
   @media (max-width: 768px) {
     height: 60vh;
-    max-height: 60vh;
   }
 
   // ⭐ Mobile (small phones)
   @media (max-width: 480px) {
     height: 50vh;
-    max-height: 50vh;
     min-height: 300px;
   }
-
 }
 
 .loading-shade {
@@ -117,6 +142,7 @@ mat-paginator {
 
 tr.element-row {
   cursor: pointer;
+  height: 57px !important;
 
   &:not(.expanded-row):hover {
     background: whitesmoke;

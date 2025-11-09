@@ -17,6 +17,7 @@ import {MatDialog} from '@angular/material/dialog';
 import {MatSelectModule} from '@angular/material/select';
 import {MatTooltipModule} from '@angular/material/tooltip';
 import {NotificationService} from '../../shared/services/notification.service';
+import {ScrollingModule} from '@angular/cdk/scrolling';
 
 @Component({
   selector: 'app-dna-table',
@@ -34,6 +35,7 @@ import {NotificationService} from '../../shared/services/notification.service';
     MatSelectModule,
     MatTooltipModule,
     FormsModule,
+    ScrollingModule
   ],
   standalone: true,
   templateUrl: './dna-table.html',
@@ -61,7 +63,14 @@ export class DnaTable implements OnInit {
   }
 
   toggle(row: TableRowData) {
+    const wasExpanded = this.isExpanded(row);
+
     this.store.toggleExpandedRow(row.personId);
+
+    // ✅ Only create form when expanding
+    if (!wasExpanded) {
+      this.formService.getRowForm(row); // Creates form on demand
+    }
   }
 
   isExpanded(row: TableRowData): boolean {

@@ -1,8 +1,12 @@
 <div class="table-container">
-  <!-- TABLE -->
   <div class="table-wrapper">
 
-    <div class="table-scroll-container mat-elevation-z8">
+    <!-- ✅ Wrap table in virtual scroll viewport -->
+    <cdk-virtual-scroll-viewport
+      itemSize="57"
+      [minBufferPx]="228"
+      [maxBufferPx]="456"
+      class="table-scroll-container mat-elevation-z8">
 
       @if (store.loading()) {
         <div class="loading-shade">
@@ -12,6 +16,7 @@
 
       <table mat-table [dataSource]="store.filteredTableData()" multiTemplateDataRows tabindex="0">
 
+        <!-- All your existing column definitions -->
         <ng-container matColumnDef="number">
           <th mat-header-cell *matHeaderCellDef>No.</th>
           <td mat-cell *matCellDef="let element; let i = dataIndex">
@@ -40,7 +45,6 @@
                             subscriptSizing="dynamic">
               <input matInput
                      [formControl]="$any(formService.getRowForm(element).get('name'))">
-              <!-- ⭐ Show validation error -->
               <mat-error>
                 @if (formService.getRowForm(element).get('name')?.hasError('required')) {
                   Name is required
@@ -56,7 +60,6 @@
         <ng-container matColumnDef="role">
           <th mat-header-cell *matHeaderCellDef>Role</th>
           <td mat-cell *matCellDef="let element" (click)="$event.stopPropagation()">
-            <!-- Dropdown selector -->
             <mat-form-field appearance="fill"
                             subscriptSizing="dynamic"
                             (click)="$event.stopPropagation()"
@@ -91,7 +94,6 @@
           </td>
         </ng-container>
 
-        <!-- ⭐ Clickable Related Person Column -->
         <ng-container matColumnDef="related_person">
           <th mat-header-cell *matHeaderCellDef>
             <div class="header-icon-alignment">
@@ -168,7 +170,6 @@
               <div class="detail-content">
                 <div class="loci-section form-field-wrapper">
 
-                  <!-- ✅ Existing loci -->
                   @for (locus of element.loci; track $index; let idx = $index) {
                     <div class="locus-item">
                       <mat-form-field class="locus-field"
@@ -193,7 +194,6 @@
                     </div>
                   }
 
-                  <!-- ✅ Inline add section -->
                   @if (isAddingLocus(element)) {
                     <div class="locus-item adding">
                       <mat-form-field class="locus-field"
@@ -217,7 +217,6 @@
                     </div>
                   }
 
-                  <!-- ✅ Add locus button -->
                   @if (!isAddingLocus(element)) {
                     <button matMiniFab
                             (click)="startAddingLocus(element); $event.stopPropagation()"
@@ -231,7 +230,7 @@
           </td>
         </ng-container>
 
-
+        <!-- ✅ Use sticky header -->
         <tr mat-header-row *matHeaderRowDef="columnsToDisplay; sticky: true"></tr>
         <tr mat-row
             *matRowDef="let element; columns: columnsToDisplay;"
@@ -241,8 +240,10 @@
         </tr>
         <tr mat-row *matRowDef="let row; columns: ['expandedDetail']" class="detail-row"></tr>
       </table>
-    </div>
-    <!-- ⭐ MATERIAL PAGINATOR -->
+
+    </cdk-virtual-scroll-viewport>
+
+    <!-- Paginator stays outside viewport -->
     <mat-paginator
       [length]="store.totalRecords()"
       [pageSize]="store.pageSize()"
@@ -254,4 +255,3 @@
     </mat-paginator>
   </div>
 </div>
-
