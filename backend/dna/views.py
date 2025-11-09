@@ -14,7 +14,7 @@ from ninja import File, UploadedFile as NinjaUploadedFile
 
 from dna.models import UploadedFile, DNALocus, Person
 from dna.schemas import FileUploadResponse, DNADataListResponse, PersonData, LocusData, DNADataResponse, \
-    UpdateLocusRequest, UpdatePersonRequest, CreateLocusRequest
+    UpdateLocusRequest, UpdatePersonRequest, CreateLocusRequest, FileInfo
 from dna.tasks import process_file_upload, match_file_task
 
 logger = logging.getLogger(__name__)
@@ -198,107 +198,157 @@ def get_all_dna_data(
 ):
     """
     Get DNA data with signed download URLs
-    Paginated by person (table rows), not by uploads
+    Shows unique parents ordered by most recent file upload
     """
     try:
-        # ✅ Query persons directly, not uploads
-        persons_query = Person.objects.select_related('uploaded_file').prefetch_related('loci')
-
         if person_id:
-            # Filter by specific person OR their related persons in same upload
-            persons_query = persons_query.filter(
-                uploaded_file__persons__id=person_id
-            ).distinct()
+            # Get specific person
+            person = Person.objects.get(id=person_id)
 
-        # ✅ Order by upload date and role for consistent results
-        persons_query = persons_query.order_by('-uploaded_file__uploaded_at', 'role', 'id')
+            # Get all files for this person
+            person_files = person.uploaded_files.all().order_by('-uploaded_at')
 
-        # ✅ Paginate persons (rows), not uploads
-        total_count = persons_query.count()
-        start = (page - 1) * page_size
-        end = start + page_size
+            # Get the most recent file
+            if person_files.exists():
+                upload = person_files.first()
 
-        persons = persons_query[start:end]
+                # Get all persons in this file
+                all_persons_in_file = upload.persons.all()
 
-        # ✅ Build result with upload grouping
-        result = []
-        processed_uploads = set()  # Track which uploads we've already added
+                result = _build_response_for_upload(upload, all_persons_in_file)
 
-        for person in persons:
-            upload = person.uploaded_file
-
-            # Skip if we already processed this upload
-            if upload.id in processed_uploads:
-                continue
-
-            processed_uploads.add(upload.id)
-
-            # Get all persons for this upload
-            all_persons = upload.persons.all()
-            parent = all_persons.filter(role__in=['father', 'mother']).first()
-            children = all_persons.filter(role='child')
-
-            # Generate signed URL
-            file_url = _generate_file_url(upload.file.name if upload.file else '')
-
-            # Build parent data
-            parent_data = None
-            if parent:
-                parent_loci = list(parent.loci.all())
-                parent_data = PersonData(
-                    id=parent.id,
-                    role=parent.role,
-                    name=parent.name,
-                    loci_count=parent.loci_count,
-                    loci=[
-                        LocusData(
-                            id=locus.id,
-                            locus_name=locus.locus_name,
-                            allele_1=locus.allele_1,
-                            allele_2=locus.allele_2,
-                        ) for locus in parent_loci
-                    ]
+                return DNADataListResponse(
+                    data=[result] if result else [],
+                    total=1,
+                    page=1,
+                    page_size=page_size
                 )
+            else:
+                return DNADataListResponse(data=[], total=0, page=1, page_size=page_size)
 
-            # ✅ Build children data (multiple children support)
-            children_data = []
-            for child in children:
-                child_loci = list(child.loci.all())
-                children_data.append(PersonData(
-                    id=child.id,
-                    role=child.role,
-                    name=child.name,
-                    loci_count=child.loci_count,
-                    loci=[
-                        LocusData(
-                            id=locus.id,
-                            locus_name=locus.locus_name,
-                            allele_1=locus.allele_1,
-                            allele_2=locus.allele_2,
-                        ) for locus in child_loci
-                    ]
-                ))
+        else:
+            # ✅ NEW: Get all uploads ordered by newest first
+            all_uploads = UploadedFile.objects.all().order_by('-uploaded_at')
 
-            # ✅ Create one response per upload (not per person)
-            result.append(DNADataResponse(
-                id=upload.id,
-                file=file_url,
-                uploaded_at=upload.uploaded_at.isoformat(),
-                parent=parent_data,
-                child=children_data[0] if len(children_data) == 1 else None,  # Single child (backward compat)
-                children=children_data if len(children_data) > 1 else None,  # Multiple children
+            total_count = all_uploads.count()
+            start = (page - 1) * page_size
+            end = start + page_size
+
+            uploads = all_uploads[start:end]
+
+            # Build responses
+            result = []
+            seen_parents = set()  # ✅ Track which parents we've already shown
+
+            for upload in uploads:
+                all_persons_in_file = upload.persons.all()
+
+                # ✅ Check if this upload has a parent
+                parent = all_persons_in_file.filter(role__in=['father', 'mother']).first()
+
+                if parent:
+                    # ✅ Only show parent once (their most recent upload)
+                    if parent.id not in seen_parents:
+                        seen_parents.add(parent.id)
+                        response = _build_response_for_upload(upload, all_persons_in_file)
+                        if response:
+                            result.append(response)
+                else:
+                    # ✅ No parent (orphan children) - always show
+                    response = _build_response_for_upload(upload, all_persons_in_file)
+                    if response:
+                        result.append(response)
+
+            return DNADataListResponse(
+                data=result,
+                total=len(result),  # ✅ Actual count after deduplication
+                page=page,
+                page_size=page_size
+            )
+
+    except Exception as e:
+        logger.error(f"get_all_dna_data error: {e}", exc_info=True)
+        return DNADataListResponse(data=[], total=0, page=1, page_size=page_size)
+
+
+def _build_response_for_upload(upload, all_persons_in_file):
+    """
+    Helper function to build DNADataResponse for a single upload
+    """
+    try:
+        parent = all_persons_in_file.filter(role__in=['father', 'mother']).first()
+        children = all_persons_in_file.filter(role='child')
+
+        # Build parent data
+        parent_data = None
+        if parent:
+            parent_loci = list(parent.loci.all())
+
+            # ✅ Get ALL files for this parent (not just current upload)
+            parent_files = parent.uploaded_files.all().order_by('-uploaded_at')
+
+            parent_data = PersonData(
+                id=parent.id,
+                role=parent.role,
+                name=parent.name,
+                loci_count=parent.loci_count,
+                loci=[
+                    LocusData(
+                        id=locus.id,
+                        locus_name=locus.locus_name,
+                        allele_1=locus.allele_1,
+                        allele_2=locus.allele_2,
+                    ) for locus in parent_loci
+                ],
+                files=[  # ✅ ALL parent files
+                    FileInfo(
+                        id=f.id,
+                        file=_generate_file_url(f.file.name if f.file else ''),
+                        uploaded_at=f.uploaded_at.isoformat()
+                    ) for f in parent_files
+                ]
+            )
+
+        # Build children data
+        children_data = []
+        for child in children:
+            child_loci = list(child.loci.all())
+
+            # ✅ Get ALL files for THIS specific child
+            child_files = child.uploaded_files.all().order_by('-uploaded_at')
+
+            children_data.append(PersonData(
+                id=child.id,
+                role=child.role,
+                name=child.name,
+                loci_count=child.loci_count,
+                loci=[
+                    LocusData(
+                        id=locus.id,
+                        locus_name=locus.locus_name,
+                        allele_1=locus.allele_1,
+                        allele_2=locus.allele_2,
+                    ) for locus in child_loci
+                ],
+                files=[  # ✅ ALL files for this child
+                    FileInfo(
+                        id=f.id,
+                        file=_generate_file_url(f.file.name if f.file else ''),
+                        uploaded_at=f.uploaded_at.isoformat()
+                    ) for f in child_files
+                ]
             ))
 
-        return DNADataListResponse(
-            data=result,
-            total=total_count,
-            page=page,
-            page_size=page_size
+        return DNADataResponse(
+            id=upload.pk,
+            parent=parent_data,
+            child=children_data[0] if len(children_data) == 1 else None,
+            children=children_data if len(children_data) > 1 else None,
         )
 
     except Exception as e:
-        logger.error(f"get_all_dna_data error: {e}")
-        return DNADataListResponse(data=[], total=0, page=1, page_size=page_size)
+        logger.error(f"_build_response_for_upload error: {e}", exc_info=True)
+        return None
 
 
 @upload_router.patch('/persons/{person_id}/')
@@ -342,7 +392,7 @@ def update_person(request, person_id: int, data: UpdatePersonRequest):
             'success': True,
             'message': f'Updated {", ".join(updated_fields)}',
             'data': {
-                'id': person.id,
+                'id': person.pk,
                 'name': person.name,
                 'role': person.role
             }
@@ -371,7 +421,7 @@ def update_locus(request, locus_id: int, data: UpdateLocusRequest):
             'success': True,
             'message': f'Updated {locus.locus_name}',
             'data': {
-                'id': locus.id,
+                'id': locus.pk,
                 'locus_name': locus.locus_name,
                 'allele_1': locus.allele_1,
                 'allele_2': locus.allele_2
@@ -427,6 +477,106 @@ def delete_upload(request, upload_id: int):
         return 404, {
             'success': False,
             'message': 'Failed to delete record'
+        }
+
+
+@upload_router.delete('/person/{person_id}/', response={200: dict, 404: dict})
+def delete_person(request, person_id: int):
+    """
+    Delete a person and all related data
+
+    If parent: deletes parent + all children + all files from S3
+    If child: deletes only that child + their file from S3
+
+    Args:
+        person_id: ID of Person to delete
+
+    Returns:
+        Success message or error
+    """
+    try:
+        # Get the person
+        person = get_object_or_404(Person, id=person_id)
+        person_name = person.name
+        person_role = person.role
+
+        logger.info(f"Deleting person ID {person_id}: {person_name} ({person_role})")
+
+        if person_role in ['father', 'mother']:
+            # ✅ PARENT DELETION
+
+            # Get all files associated with this parent
+            parent_files = person.uploaded_files.all()
+            file_count = parent_files.count()
+
+            # Get all children in those files
+            children_in_files = Person.objects.filter(
+                uploaded_files__in=parent_files,
+                role='child'
+            ).distinct()
+
+            children_count = children_in_files.count()
+
+            # Delete all children first
+            for child in children_in_files:
+                logger.info(f"  Deleting child: {child.name}")
+                child.delete()
+
+            # Delete all files from S3 and database
+            for file_obj in parent_files:
+                if file_obj.file:
+                    file_obj.file.delete(save=False)  # Delete from S3
+                    logger.info(f"  Deleted file from S3: {file_obj.file.name}")
+                file_obj.delete()  # Delete from database
+
+            # Delete parent
+            person.delete()
+
+            logger.info(
+                f"✅ Successfully deleted parent {person_name} + "
+                f"{children_count} children + {file_count} files"
+            )
+
+            return 200, {
+                'success': True,
+                'message': f'Deleted {person_name}, {children_count} children, and {file_count} files'
+            }
+
+        else:
+            # ✅ CHILD DELETION
+
+            # Get files for this child
+            child_files = person.uploaded_files.all()
+            file_count = child_files.count()
+
+            # Delete files from S3 and database
+            for file_obj in child_files:
+                if file_obj.file:
+                    file_obj.file.delete(save=False)  # Delete from S3
+                    logger.info(f"  Deleted file from S3: {file_obj.file.name}")
+                file_obj.delete()  # Delete from database
+
+            # Delete child
+            person.delete()
+
+            logger.info(f"✅ Successfully deleted child {person_name} + {file_count} files")
+
+            return 200, {
+                'success': True,
+                'message': f'Deleted {person_name} and {file_count} files'
+            }
+
+    except Person.DoesNotExist:
+        logger.warning(f"Person {person_id} not found")
+        return 404, {
+            'success': False,
+            'message': 'Person not found'
+        }
+    except Exception as e:
+        logger.error(f"Failed to delete person {person_id}: {e}", exc_info=True)
+        return 500, {
+            'success': False,
+            'message': 'Failed to delete person'
         }
 
 
@@ -496,7 +646,7 @@ def create_locus(request, person_id: int, data: CreateLocusRequest):
             'success': True,
             'message': f'Created locus {data.locus_name}',
             'data': {
-                'id': locus.id,
+                'id': locus.pk,
                 'locus_name': locus.locus_name,
                 'allele_1': locus.allele_1,
                 'allele_2': locus.allele_2

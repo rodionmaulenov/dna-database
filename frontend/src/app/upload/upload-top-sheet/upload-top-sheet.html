@@ -65,7 +65,7 @@
             }
             @if (fileWithStatus.status === 'uploading') {
               <span class="loading-text">
-                  {{ store.selectedRole() === 'save' ? 'Uploading' : 'Searching' }}
+                {{ store.selectedRole() === 'save' ? 'Uploading' : 'Searching' }}
                 <span class="loading-dots"></span>
               </span>
             }
@@ -79,7 +79,7 @@
               }
             }
             @if (fileWithStatus.status === 'error') {
-              <span style="color: darkred">{{ fileWithStatus.response?.errors?.[0] }}</span>
+              <span style="color: darkred">Upload failed</span>
             }
           </p>
 
@@ -99,6 +99,15 @@
           </div>
         </mat-list-item>
 
+        <!-- ✅ ERROR MESSAGE IN SEPARATE ROW -->
+        @if (fileWithStatus.status === 'error') {
+          <div class="error-message-container">
+            <span
+              [innerHTML]="formatErrorMessage(fileWithStatus.response?.errors?.[0])"
+              (click)="handleErrorLinkClick($event)">
+            </span>
+          </div>
+        }
 
         <!-- Show matches if success and mode is not 'save' -->
         @if (fileWithStatus.status === 'success' &&

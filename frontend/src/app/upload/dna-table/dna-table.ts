@@ -55,11 +55,15 @@ export class DnaTable implements OnInit {
   selectedLocusName: string = '';
 
   columnsToDisplay = [
-    'number', 'name', 'role', 'loci_count', 'uploaded_at', 'related_person', 'file', 'actions'
+    'number', 'name', 'role', 'loci_count', 'related_person', 'file', 'actions'
   ];
 
   ngOnInit() {
     this.store.loadTableData({ page: 1 });
+  }
+
+  getFiles(element: TableRowData): Array<{ id: number; file: string; uploaded_at: string }> {
+    return element.files || [];
   }
 
   toggle(row: TableRowData) {
@@ -236,7 +240,7 @@ export class DnaTable implements OnInit {
 
     dialogRef.afterClosed().subscribe(confirmed => {
       if (confirmed) {
-        this.store.deleteRecord(row.id);
+        this.store.deleteRecord(row.personId);
       }
     });
   }

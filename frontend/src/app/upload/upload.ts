@@ -41,6 +41,13 @@ export class Upload {
           personRole: match.role
         });
       }
+      // ✅ ADD THIS - User clicked on error link
+      if (result?.action === 'view_person') {
+        this.tableStore.searchMatches({
+          personId: result.personId,
+          personRole: result.role
+        });
+      }
     });
   }
 

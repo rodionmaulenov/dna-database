@@ -58,7 +58,12 @@
         </ng-container>
 
         <ng-container matColumnDef="role">
-          <th mat-header-cell *matHeaderCellDef>Role</th>
+          <th mat-header-cell *matHeaderCellDef>
+            <div class="header-icon-alignment">
+              <span>Role</span>
+              <mat-icon class="header-icon-size">edit</mat-icon>
+            </div>
+          </th>
           <td mat-cell *matCellDef="let element" (click)="$event.stopPropagation()">
             <mat-form-field appearance="fill"
                             subscriptSizing="dynamic"
@@ -87,13 +92,6 @@
           <td mat-cell *matCellDef="let element" (click)="$event.stopPropagation()">{{ element.loci_count }}</td>
         </ng-container>
 
-        <ng-container matColumnDef="uploaded_at">
-          <th mat-header-cell *matHeaderCellDef>Uploaded</th>
-          <td mat-cell *matCellDef="let element" (click)="$event.stopPropagation()">
-            {{ element.uploaded_at | date:'yyyy-MM-dd' }}
-          </td>
-        </ng-container>
-
         <ng-container matColumnDef="related_person">
           <th mat-header-cell *matHeaderCellDef>
             <div class="header-icon-alignment">
@@ -120,14 +118,35 @@
         <ng-container matColumnDef="file">
           <th mat-header-cell *matHeaderCellDef>
             <div class="header-icon-alignment">
-              <span>File</span>
+              <span>File(s)</span>
               <mat-icon class="header-icon-size">link</mat-icon>
             </div>
           </th>
           <td mat-cell *matCellDef="let element" (click)="$event.stopPropagation()">
-            <a [href]="element.file" target="_blank" class="file-link">
-              file.pdf
-            </a>
+            @if (element.files && element.files.length > 1) {
+              <!-- Multiple files - show as numbered chips -->
+              <div class="file-chips">
+                @for (file of getFiles(element); track file.id; let idx = $index) {
+                  <a [href]="file.file"
+                     target="_blank"
+                     class="file-chip"
+                     [matTooltip]="'Uploaded: ' + (file.uploaded_at | date:'yyyy-MM-dd HH:mm')">
+                    {{ idx + 1 }}
+                  </a>
+                }
+              </div>
+            } @else if (element.files && element.files.length === 1) {
+              <!-- Single file - show text link -->
+              <a [href]="element.files[0].file"
+                 target="_blank"
+                 class="file-link"
+                 [matTooltip]="'Uploaded: ' + (element.files[0].uploaded_at | date:'yyyy-MM-dd HH:mm')">
+                file
+              </a>
+            } @else {
+              <!-- No files -->
+              <span>-</span>
+            }
           </td>
         </ng-container>
 
@@ -152,15 +171,18 @@
               }
             </button>
 
-            <button matButton
-                    color="warn"
-                    [disabled]="isUpdating(element)"
-                    (click)="confirmDelete(element)">
-              <div class="icon-alignment">
-                <mat-icon class="row-icon-size">delete</mat-icon>
-                Delete
-              </div>
-            </button>
+            <!-- ✅ Only show delete button for parents -->
+            @if (element.role === 'father' || element.role === 'mother') {
+              <button matButton
+                      color="warn"
+                      [disabled]="isUpdating(element)"
+                      (click)="confirmDelete(element)">
+                <div class="icon-alignment">
+                  <mat-icon class="row-icon-size">delete</mat-icon>
+                  Delete
+                </div>
+              </button>
+            }
           </td>
         </ng-container>
 

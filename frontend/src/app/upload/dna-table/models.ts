@@ -2,8 +2,6 @@ import {LocusData, PersonData} from '../models';
 
 export interface DNADataResponse {
   id: number;
-  file: string;
-  uploaded_at: string;
   parent: PersonData | null;
   child: PersonData | null;
   children: PersonData[] | null;
@@ -19,11 +17,15 @@ export interface DNADataListResponse {
 export interface TableRowData {
   id: number;
   personId: number;
-  uploaded_at: string;
   name: string;
   role: string;
   loci_count: number;
-  file: string;
+  file: string;  // First file (backward compatibility)
+  files?: Array<{  // ✅ Already has this
+    id: number;
+    file: string;
+    uploaded_at: string;
+  }>;
   loci: LocusData[];
 
   relatedPersonId: number | null; // ID of child (if parent) or parent (if child)
@@ -63,11 +65,6 @@ export const initialState: DnaTableState = {
   expandedRowId: null,
   updatingRowId: null,
 };
-
-export interface UpdatePersonData {
-  name?: string;
-  role?: string;
-}
 
 export interface UpdatePersonData {
   name?: string;

@@ -11,6 +11,11 @@ export interface PersonData {
   name: string;
   loci_count: number;
   loci: LocusData[];
+  files?: Array<{
+    id: number;
+    file: string;
+    uploaded_at: string;
+  }>;
 }
 
 export interface FileWithStatus {
@@ -48,11 +53,4 @@ export interface FileUploadResponse {
   top_matches?: MatchResult[];
 }
 
-interface TaskStatusResponse {
-  status: 'processing' | 'completed' | 'failed' | 'error';
-  success: boolean | null;
-  errors?: string[];
-  uploaded_file_id?: number;
-  message?: string;
-}
 

@@ -16,7 +16,13 @@ class Person(models.Model):
         ('child', 'Child'),
     ]
 
-    uploaded_file = models.ForeignKey(UploadedFile, on_delete=models.CASCADE, related_name='persons')
+    # ✅ CHANGE: Many-to-Many relationship (person can have multiple files)
+    uploaded_files = models.ManyToManyField(
+        UploadedFile,
+        related_name='persons',
+        through='PersonFile'  # Custom through model to track which file added which person
+    )
+
     role = models.CharField(max_length=10, choices=ROLE_CHOICES)
     name = models.CharField(max_length=255)
     loci_count = models.IntegerField(default=0, help_text="Number of analyzed loci")
@@ -26,6 +32,21 @@ class Person(models.Model):
             models.Index(fields=['role']),
         ]
 
+    def get_latest_upload_date(self):
+        """Get the most recent upload date for this person"""
+        return self.uploaded_files.order_by(
+            '-uploaded_at').first().uploaded_at if self.uploaded_files.exists() else None
+
+
+# ✅ Junction table to track which file each person came from
+class PersonFile(models.Model):
+    person = models.ForeignKey(Person, on_delete=models.CASCADE)
+    uploaded_file = models.ForeignKey(UploadedFile, on_delete=models.CASCADE)
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['person', 'uploaded_file']
+        ordering = ['-added_at']
 
 
 class DNALocus(models.Model):
@@ -43,11 +64,19 @@ class DNALocus(models.Model):
     allele_1 = models.CharField(max_length=10, blank=True, null=True)
     allele_2 = models.CharField(max_length=10, blank=True, null=True)
 
+    source_file = models.ForeignKey(
+        UploadedFile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='loci_added',
+        help_text="Which file added this locus"
+    )
 
     class Meta:
         unique_together = ['person', 'locus_name']
         indexes = [
-            models.Index(fields=['locus_name']),  # Speed up locus lookups
-            models.Index(fields=['allele_1', 'allele_2']),  # Speed up allele comparisons
-            models.Index(fields=['person', 'locus_name']),  # Already optimized by unique_together
+            models.Index(fields=['locus_name']),
+            models.Index(fields=['allele_1', 'allele_2']),
+            models.Index(fields=['person', 'locus_name']),
         ]

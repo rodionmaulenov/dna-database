@@ -87,7 +87,6 @@ export const DnaTableStore = signalStore(
     const httpService = inject(DnaTableHttpService);
     const notificationService = inject(NotificationService);
 
-    // Helper: Build table rows from API response
     const buildTableRows = (response: DNADataListResponse): TableRowData[] => {
       const rows: TableRowData[] = [];
 
@@ -108,17 +107,17 @@ export const DnaTableStore = signalStore(
           rows.push({
             id: item.id,
             personId: item.parent.id,
-            uploaded_at: item.uploaded_at,
             name: item.parent.name,
             role: item.parent.role,
-            file: item.file,
+            file: item.parent.files?.[0]?.file || '',
+            files: item.parent.files || [],
             loci_count: item.parent.loci_count,
             loci: item.parent.loci,
             // First child (backward compatibility)
             relatedPersonId: allChildren[0]?.id || null,
             relatedPersonName: allChildren[0]?.name || null,
             relatedPersonRole: allChildren[0]?.role || null,
-            // ✅ All children
+            // All children
             relatedPersons: allChildren.map(child => ({
               id: child.id,
               name: child.name,
@@ -132,16 +131,16 @@ export const DnaTableStore = signalStore(
           rows.push({
             id: item.id,
             personId: item.child.id,
-            uploaded_at: item.uploaded_at,
             name: item.child.name,
             role: item.child.role,
-            file: item.file,
+            file: item.child.files?.[0]?.file || '',  // First file
+            files: item.child.files || [],  // ✅ ALL files for this child
             loci_count: item.child.loci_count,
             loci: item.child.loci,
             relatedPersonId: item.parent?.id || null,
             relatedPersonName: item.parent?.name || null,
             relatedPersonRole: item.parent?.role || null,
-            relatedPersons: null  // Children don't have multiple related persons
+            relatedPersons: null
           });
         }
 
@@ -151,16 +150,16 @@ export const DnaTableStore = signalStore(
             rows.push({
               id: item.id,
               personId: child.id,
-              uploaded_at: item.uploaded_at,
               name: child.name,
               role: child.role,
-              file: item.file,
+              file: child.files?.[0]?.file || '',  // First file
+              files: child.files || [],  // ✅ ALL files for this child
               loci_count: child.loci_count,
               loci: child.loci,
               relatedPersonId: item.parent?.id || null,
               relatedPersonName: item.parent?.name || null,
               relatedPersonRole: item.parent?.role || null,
-              relatedPersons: null  // Children don't have multiple related persons
+              relatedPersons: null
             });
           });
         }
@@ -614,33 +613,40 @@ export const DnaTableStore = signalStore(
         return store.updatingRowId() === personId;
       },
 
-      // Add this method to withMethods()
       deleteRecord: rxMethod<number>(
         pipe(
-          switchMap((uploadId) => {
-            patchState(store, {loading: true});
-
-            return httpService.deleteUpload(uploadId).pipe(
+          tap((personId) => {
+            patchState(store, {
+              loading: true,
+              updatingRowId: personId  // ✅ ADD THIS
+            });
+          }),
+          switchMap((personId) => {
+            return httpService.deletePerson(personId).pipe(
               tapResponse({
-                next: () => {
+                next: (response) => {
                   patchState(store, (state) => {
                     const updatedData = state.tableData.filter(
-                      row => row.id !== uploadId
+                      row => row.personId !== personId
                     );
 
                     return {
                       tableData: updatedData,
-                      totalRecords: state.totalRecords - 1,
+                      totalRecords: Math.max(0, state.totalRecords - 1),
                       loading: false,
-                      expandedRowId: null
+                      expandedRowId: null,
+                      updatingRowId: null  // ✅ Clear updating state
                     };
                   });
 
-                  notificationService.success('Record deleted successfully');
+                  notificationService.success(response.message);
                 },
                 error: (error: any) => {
-                  patchState(store, {loading: false});
-                  const errorMsg = error?.error?.message || 'Failed to delete record';
+                  patchState(store, {
+                    loading: false,
+                    updatingRowId: null  // ✅ Clear updating state
+                  });
+                  const errorMsg = error?.error?.message || 'Failed to delete person';
                   notificationService.error(`Delete failed: ${errorMsg}`);
                 }
               })

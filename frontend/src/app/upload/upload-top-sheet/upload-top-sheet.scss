@@ -112,3 +112,29 @@
 .person-link-upload:hover {
   text-decoration: underline;
 }
+
+.error-message-container {
+  padding: 8px 16px 12px 35px; // Align with text (56px = icon width)
+  color: darkred;
+  font-size: 13px;
+  line-height: 1.5;
+  word-wrap: break-word;
+  white-space: normal;
+  background: #ffebee;
+  border-left: 3px solid #d32f2f;
+  margin: -8px 16px 8px 16px;
+  border-radius: 4px;
+}
+
+.person-error-link {
+  color: #1976d2;
+  text-decoration: underline;
+  margin: 0 2px;
+  cursor: pointer;
+  font-weight: 600;
+
+  &:hover {
+    color: #1565c0;
+    text-decoration: none;
+  }
+}

@@ -9,12 +9,20 @@ class LocusData(BaseModel):
     allele_2: str
 
 
+class FileInfo(BaseModel):
+    """Information about a single uploaded file"""
+    id: int
+    file: str
+    uploaded_at: str
+
+
 class PersonData(BaseModel):
     id: int
     role: str
     name: str
     loci_count: int
     loci: List[LocusData]
+    files: Optional[List[FileInfo]] = None  # ✅ NEW: All files for this person
 
 
 class MatchResult(BaseModel):
@@ -37,12 +45,10 @@ class FileUploadResponse(BaseModel):
 
 class DNADataResponse(BaseModel):
     id: int
-    file: str
-    uploaded_at: str
     overall_confidence: float = 1.0
     parent: Optional[PersonData] = None
-    child: Optional[PersonData] = None
-    children: Optional[List[PersonData]] = None
+    child: Optional[PersonData] = None  # Single child (backward compatibility)
+    children: Optional[List[PersonData]] = None  # Multiple children
 
     class Config:
         from_attributes = True

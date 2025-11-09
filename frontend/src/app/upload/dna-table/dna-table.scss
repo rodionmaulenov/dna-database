@@ -47,39 +47,6 @@
   background: white;
 }
 
-//.table-scroll-container {
-//  position: relative;
-//  display: flex;
-//  justify-content: space-between;
-//  flex-direction: column;
-//  min-height: 200px;
-//  max-height: 700px;
-//  border: 1px solid #e0e0e0;
-//  border-radius: 16px 16px 0 0;
-//  overflow: auto;
-//
-//
-//  // ⭐ Tablet (landscape and portrait)
-//  @media (max-width: 1024px) {
-//    height: 70vh;
-//    max-height: 70vh;
-//  }
-//
-//  // ⭐ Mobile (large phones)
-//  @media (max-width: 768px) {
-//    height: 60vh;
-//    max-height: 60vh;
-//  }
-//
-//  // ⭐ Mobile (small phones)
-//  @media (max-width: 480px) {
-//    height: 50vh;
-//    max-height: 50vh;
-//    min-height: 300px;
-//  }
-//
-//}
-
 .table-scroll-container {
   position: relative;
   display: flex;
@@ -106,16 +73,16 @@
 }
 
 .loading-shade {
-  position: absolute;
-  top: 0;
+  position: sticky; 
+  top: 50%;
   left: 0;
-  bottom: 0;
   right: 0;
-  z-index: 1;
+  height: 0;
+  z-index: 9999;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 16px 16px 0 0;
+  pointer-events: none;
 }
 
 table {
@@ -291,6 +258,50 @@ td[matColumnDef="name"] {
     font-size: 22px;
     width: 22px;
     height: 22px;
+  }
+}
+
+.file-chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 14px;
+  background: #1976d2;
+  color: white;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  cursor: pointer;
+
+  &:hover {
+    background: #1565c0;
+    transform: scale(1.05);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+}
+
+.file-link {
+  color: #1976d2;
+  text-decoration: none;
+  font-weight: 500;
+
+  &:hover {
+    text-decoration: underline;
   }
 }
 

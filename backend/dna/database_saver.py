@@ -20,54 +20,52 @@ logger = logging.getLogger(__name__)
 GENDER_MARKERS = ['amelogenin', 'y indel', 'y-indel']
 
 
-def check_duplicate_by_alleles(extraction_result: Dict[str, Any]) -> Dict[str, Any]:
+def check_parent_and_children_duplicates(extraction_result: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Check if same DNA data (alleles) already exists in database
-    Compares allele values across critical loci
+    Smart duplicate detection with Many-to-Many relationship
+    - Check if parent exists (by DNA)
+    - Check if each child exists (by DNA)
 
     Returns:
-        {'is_duplicate': bool, 'existing_upload_id': int or None}
+        {
+            'parent_exists': bool,
+            'existing_parent': Person or None,
+            'new_children': List of child data that are NEW,
+            'duplicate_children': List of child names that already exist,
+        }
     """
     parent_data = extraction_result.get('parent') or extraction_result.get('father', {})
+    children_data = extraction_result.get('children', [])
+
+    if not children_data:
+        single_child = extraction_result.get('child')
+        if single_child and single_child.get('loci'):
+            children_data = [single_child]
+
     parent_loci = parent_data.get('loci', [])
 
-    if not parent_loci:
-        return {'is_duplicate': False, 'existing_upload_id': None}
-
+    # Build fingerprints
     critical_loci = ['D8S1179', 'D21S11', 'D7S820', 'D3S1358', 'FGA']
-    new_fingerprint = {}
+    parent_fingerprint = _build_fingerprint(parent_loci, critical_loci)
 
-    for locus_data in parent_loci:
-        locus_name = locus_data.get('locus_name')
+    result = {
+        'parent_exists': False,
+        'existing_parent': None,
+        'new_children': [],
+        'duplicate_children': [],
+    }
 
-        # Skip gender markers
-        if locus_name and locus_name.lower() in GENDER_MARKERS:
-            continue
+    if len(parent_fingerprint) < 3:
+        result['new_children'] = children_data
+        return result
 
-        if locus_name in critical_loci:
-            allele_1 = str(locus_data.get('allele_1', '')).strip()
-            allele_2 = str(locus_data.get('allele_2', '')).strip()
+    # ✅ Step 1: Find if parent exists
+    all_parents = Person.objects.filter(role__in=['father', 'mother'])
 
-            # Skip if empty
-            if not allele_1 or not allele_2:
-                continue
-
-            alleles = tuple(sorted([allele_1, allele_2]))
-            new_fingerprint[locus_name] = alleles
-
-    if len(new_fingerprint) < 3:
-        return {'is_duplicate': False, 'existing_upload_id': None}
-
-    all_uploads = UploadedFile.objects.all()
-
-    for upload in all_uploads:
-        existing_parent = upload.persons.filter(role__in=['father', 'mother']).first()
-
-        if not existing_parent:
-            continue
-
+    existing_parent = None
+    for parent in all_parents:
         existing_loci = DNALocus.objects.filter(
-            person=existing_parent,
+            person=parent,
             locus_name__in=critical_loci
         )
 
@@ -75,39 +73,63 @@ def check_duplicate_by_alleles(extraction_result: Dict[str, Any]) -> Dict[str, A
         for locus in existing_loci:
             allele_1 = str(locus.allele_1).strip()
             allele_2 = str(locus.allele_2 or '').strip()
-
             alleles = tuple(sorted([allele_1, allele_2]))
             existing_fingerprint[locus.locus_name] = alleles
 
-        matches = 0
-        total_compared = 0
+        matches, total = _compare_fingerprints(parent_fingerprint, existing_fingerprint, critical_loci)
 
-        for locus_name in critical_loci:
-            if locus_name in new_fingerprint and locus_name in existing_fingerprint:
-                total_compared += 1
+        if total >= 3 and (matches / total) >= 0.8:
+            existing_parent = parent
+            result['parent_exists'] = True
+            result['existing_parent'] = parent
+            break
 
-                new_alleles = new_fingerprint[locus_name]
-                existing_alleles = existing_fingerprint[locus_name]
+    # ✅ Step 2: Check each child
+    if existing_parent:
+        # ✅ Get all children across ALL files linked to this parent
+        all_files_with_parent = existing_parent.uploaded_files.all()
+        existing_children = Person.objects.filter(
+            uploaded_files__in=all_files_with_parent,
+            role='child'
+        ).distinct()
 
-                if new_alleles == existing_alleles:
-                    matches += 1
+        for child_data in children_data:
+            child_loci = child_data.get('loci', [])
+            child_fingerprint = _build_fingerprint(child_loci, critical_loci)
 
-        if total_compared >= 3 and (matches / total_compared) >= 0.8:
-            # ✅ Get existing person's name
-            existing_name = existing_parent.name or "Unknown"
+            is_duplicate = False
+            for existing_child in existing_children:
+                child_existing_loci = DNALocus.objects.filter(
+                    person=existing_child,
+                    locus_name__in=critical_loci
+                )
 
-            logger.error(
-                f"Duplicate DNA detected: Upload ID {upload.id}, "
-                f"Match ratio: {matches}/{total_compared}"
-            )
-            return {
-                'is_duplicate': True,
-                'existing_upload_id': upload.id,
-                'existing_person_name': existing_name,  # ✅ Add this
-                'match_ratio': f"{matches}/{total_compared}"
-            }
+                child_existing_fingerprint = {}
+                for locus in child_existing_loci:
+                    allele_1 = str(locus.allele_1).strip()
+                    allele_2 = str(locus.allele_2 or '').strip()
+                    alleles = tuple(sorted([allele_1, allele_2]))
+                    child_existing_fingerprint[locus.locus_name] = alleles
 
-    return {'is_duplicate': False, 'existing_upload_id': None}
+                child_matches, child_total = _compare_fingerprints(
+                    child_fingerprint,
+                    child_existing_fingerprint,
+                    critical_loci
+                )
+
+                if child_total >= 3 and (child_matches / child_total) >= 0.8:
+                    # This child already exists
+                    is_duplicate = True
+                    result['duplicate_children'].append(child_data.get('name', 'Unknown'))
+                    break
+
+            if not is_duplicate:
+                result['new_children'].append(child_data)
+    else:
+        # Parent is new, all children are new
+        result['new_children'] = children_data
+
+    return result
 
 
 def _count_valid_loci(loci: List[Dict]) -> int:
@@ -146,7 +168,8 @@ def _save_person_loci(
         person: Person,
         loci_data: List[Dict],
         filename: str,
-        errors: List[str]
+        errors: List[str],
+        source_file: UploadedFile  # ✅ NEW parameter
 ) -> int:
     """
     Save loci for a person (parent or child)
@@ -197,6 +220,7 @@ def _save_person_loci(
                 locus_name=locus_name,
                 allele_1=str(allele_1),
                 allele_2=str(allele_2),
+                source_file=source_file  # ✅ Track source
             )
             saved_count += 1
 
@@ -225,36 +249,24 @@ def save_dna_extraction_to_database(
     Save DNA extraction result to database with validation
     Supports: Parent only, Parent + 1 child, Parent + multiple children
     """
-    errors = []
-
     logger.info(f"Extraction result keys: {extraction_result.keys()}")
 
     try:
-        # === STEP 1: Duplicate Check ===
-        duplicate_check = check_duplicate_by_alleles(extraction_result)
+        # === STEP 1: Smart Duplicate Check ===
+        duplicate_check = check_parent_and_children_duplicates(extraction_result)
 
-        if duplicate_check['is_duplicate']:
-            # ✅ Get the duplicate person's name
-            existing_name = duplicate_check.get('existing_person_name', 'Unknown')
-
-            logger.error(
-                f"Duplicate DNA detected: Upload ID {duplicate_check['existing_upload_id']}, "
-                f"Match ratio: {duplicate_check['match_ratio']}, "
-                f"File: {filename}"
-            )
-            return {
-                'success': False,
-                'errors': [f"Duplicate DNA data detected: {existing_name}"],  # ✅ Add name
-            }
+        parent_exists = duplicate_check['parent_exists']
+        existing_parent = duplicate_check['existing_parent']
+        new_children = duplicate_check['new_children']
+        duplicate_children = duplicate_check['duplicate_children']
 
         # === STEP 2: Extract Data ===
         parent_data = extraction_result.get('parent') or extraction_result.get('father', {})
         parent_role = extraction_result.get('parent_role', 'unknown')
 
-        # ✅ Support both old format (single child) and new format (multiple children)
+        # Support both old format (single child) and new format (multiple children)
         children_data = extraction_result.get('children', [])
         if not children_data:
-            # Backward compatibility: check for single 'child' key
             single_child = extraction_result.get('child')
             if single_child and single_child.get('loci'):
                 children_data = [single_child]
@@ -267,7 +279,19 @@ def save_dna_extraction_to_database(
 
         logger.info(f"Data structure: has_parent={has_parent}, children_count={len(children_data)}")
 
-        # Check if we have ANY data
+        # ═══════════════════════════════════════════════
+        # ERROR CASES
+        # ═══════════════════════════════════════════════
+
+        # Case 1: Child-only upload (REJECT)
+        if not has_parent and has_children:
+            logger.error(f"Child-only upload rejected: {filename}")
+            return {
+                'success': False,
+                'errors': ["Cannot save child without parent. Please upload file containing parent DNA."],
+            }
+
+        # Case 2: No data at all
         if not has_parent and not has_children:
             logger.error(f"No DNA data in {filename}")
             return {
@@ -275,12 +299,91 @@ def save_dna_extraction_to_database(
                 'errors': ["No DNA data found in file"],
             }
 
-        # === STEP 4: Validate Loci Counts ===
-        valid_parent_count = _count_valid_loci(parent_loci) if has_parent else 0
+        # Case 3: Parent exists + NO new children
+        if parent_exists and len(new_children) == 0:
 
-        logger.info(f"Valid parent loci: {valid_parent_count}")
+            if len(duplicate_children) > 0:
+                # Subcase A: Parent + children duplicate
+                duplicate_names = []
+                duplicate_person_ids = []
 
-        # Validate each child
+                for child in duplicate_children:
+                    if isinstance(child, dict):
+                        duplicate_names.append(child['name'])
+                        duplicate_person_ids.append(child.get('person_id'))
+                    else:
+                        duplicate_names.append(child)
+
+                parent_link = f"/table?personId={existing_parent.id} [parent]"
+                child_links = ' '.join([
+                    f"/table?personId={pid} [child]"
+                    for pid in duplicate_person_ids if pid
+                ])
+
+                if len(duplicate_children) == 1:
+                    error_message = (
+                        f"Duplicate detected: {existing_parent.name} and "
+                        f"{duplicate_names[0]} already exist in database. "
+                        f"View: {parent_link} {child_links}"
+                    )
+                else:
+                    error_message = (
+                        f"Duplicate detected: {existing_parent.name} and "
+                        f"{', '.join(duplicate_names)} already exist in database. "
+                        f"View: {parent_link} {child_links}"
+                    )
+
+                logger.error(error_message)
+                return {
+                    'success': False,
+                    'errors': [error_message],
+                }
+
+            else:
+                # Subcase B: Parent ONLY (no children in upload)
+                new_loci_count = _count_valid_loci(parent_loci)
+                existing_loci_count = existing_parent.loci_count
+
+                if new_loci_count > existing_loci_count:
+                    # ✅ ACCEPT: New file has more loci - will merge
+                    logger.info(
+                        f"Accepting parent-only upload: {existing_parent.name} "
+                        f"({existing_loci_count}→{new_loci_count} loci)"
+                    )
+                    # Continue to save section below
+                else:
+                    # ❌ REJECT: No benefit
+                    error_message = (
+                        f"Duplicate parent: {existing_parent.name} already has "
+                        f"{existing_loci_count} loci (uploaded file has {new_loci_count}). "
+                        f"View: /table?personId={existing_parent.id} [parent]"
+                    )
+
+                    logger.error(error_message)
+                    return {
+                        'success': False,
+                        'errors': [error_message],
+                    }
+
+        # ═══════════════════════════════════════════════
+        # VALIDATION (for SUCCESS cases only)
+        # ═══════════════════════════════════════════════
+
+        errors = []
+
+        # Validate parent loci count
+        if has_parent:
+            valid_parent_count = _count_valid_loci(parent_loci)
+            logger.info(f"Valid parent loci: {valid_parent_count}")
+
+            if valid_parent_count < 10:
+                logger.error(f"Only {valid_parent_count} parent loci in {filename}")
+                return {
+                    'success': False,
+                    'errors': [f"Insufficient parent data ({valid_parent_count} loci). Need at least 10 loci."],
+                }
+
+        # Validate each child loci count
         for idx, child_data in enumerate(children_data):
             child_loci = child_data.get('loci', [])
             valid_child_count = _count_valid_loci(child_loci)
@@ -293,17 +396,7 @@ def save_dna_extraction_to_database(
                     'errors': [f"Insufficient child {idx + 1} data ({valid_child_count} loci). Need at least 10 loci."],
                 }
 
-        # Minimum loci validation for parent
-        if has_parent and valid_parent_count < 10:
-            logger.error(f"Only {valid_parent_count} parent loci in {filename}")
-            return {
-                'success': False,
-                'errors': [f"Insufficient parent data ({valid_parent_count} loci). Need at least 10 loci."],
-            }
-
-        # === STEP 6: Check AI Confidence ===
-        confidence_threshold = 0.8
-
+        # Check AI confidence for parent
         if has_parent:
             low_confidence_loci = []
             for locus in parent_loci:
@@ -311,18 +404,14 @@ def save_dna_extraction_to_database(
                 if locus_name and locus_name.lower() in GENDER_MARKERS:
                     continue
 
-                # Skip empty loci
                 if locus.get('allele_1') is None or locus.get('allele_2') is None:
                     continue
 
-                # Get confidence safely
                 allele_1_confidence = _safe_confidence(locus.get('allele_1_confidence'))
                 allele_2_confidence = _safe_confidence(locus.get('allele_2_confidence'))
-
-                # Safe minimum
                 min_confidence = _safe_min(allele_1_confidence, allele_2_confidence)
 
-                if min_confidence < confidence_threshold:
+                if min_confidence < 0.8:
                     low_confidence_loci.append(locus_name)
 
             if low_confidence_loci:
@@ -332,7 +421,7 @@ def save_dna_extraction_to_database(
                     f"Please re-upload better quality PDF."
                 )
 
-        # ✅ Check confidence for each child
+        # Check AI confidence for children
         if has_children:
             for idx, child_data in enumerate(children_data):
                 child_loci = child_data.get('loci', [])
@@ -343,18 +432,14 @@ def save_dna_extraction_to_database(
                     if locus_name and locus_name.lower() in GENDER_MARKERS:
                         continue
 
-                    # Skip empty loci
                     if locus.get('allele_1') is None or locus.get('allele_2') is None:
                         continue
 
-                    # Get confidence safely
                     allele_1_confidence = _safe_confidence(locus.get('allele_1_confidence'))
                     allele_2_confidence = _safe_confidence(locus.get('allele_2_confidence'))
-
-                    # Safe minimum
                     min_confidence = _safe_min(allele_1_confidence, allele_2_confidence)
 
-                    if min_confidence < confidence_threshold:
+                    if min_confidence < 0.8:
                         child_low_confidence.append(locus_name)
 
                 if child_low_confidence:
@@ -364,7 +449,7 @@ def save_dna_extraction_to_database(
                         f"Please re-upload better quality PDF."
                     )
 
-        # === STEP 7: Check Overall Quality ===
+        # Check overall quality
         overall_quality = extraction_result.get('overall_quality', 1.0)
         if overall_quality and overall_quality < 0.8:
             logger.error(f"Low overall extraction quality in {filename}: {overall_quality}")
@@ -373,82 +458,82 @@ def save_dna_extraction_to_database(
                 f"Please re-upload clearer PDF."
             )
 
-        # === STEP 8: Check Gender Detection (only if parent exists) ===
-        if has_parent and parent_role == 'unknown':
-            logger.warning(f"Cannot determine parent role in {filename}")
-            # Not a critical error - continue anyway
-
-        # === STEP 9: Check Names ===
-        parent_name = None
-
-        if has_parent:
-            parent_name = (parent_data.get('name') or '').strip() or 'Unknown'
-            if parent_name == 'Unknown':
-                logger.warning(f"Parent name missing in file: {filename}")
-
-        # ✅ Check names for all children
-        for idx, child_data in enumerate(children_data):
-            child_name = (child_data.get('name') or '').strip()
-            if not child_name:
-                logger.warning(f"Child {idx + 1} name missing in file: {filename}")
-
-        # === STOP HERE IF ERRORS ===
+        # Stop if validation errors
         if errors:
             return {
                 'success': False,
                 'errors': errors,
             }
 
-        # === STEP 10: ALL VALIDATIONS PASSED - Now save everything ===
+        # ═══════════════════════════════════════════════
+        # SAVE TO DATABASE
+        # ═══════════════════════════════════════════════
+
         with transaction.atomic():
 
-            # ✅ FIRST: Upload to S3 (only if validation passed)
-            s3_file_path = None
-
+            # Upload file to S3
             if settings.USE_S3:
                 logger.info(f"📤 Uploading to S3: {filename}")
                 try:
                     with open(local_file_path, 'rb') as local_file:
                         django_file = File(local_file, name=filename)
-                        # Save to S3: bucket/uploads/filename
                         s3_file_path = default_storage.save(f'uploads/{filename}', django_file)
                         logger.info(f"✅ Uploaded to S3: {s3_file_path}")
                 except Exception as s3_error:
                     logger.error(f"❌ S3 upload failed: {s3_error}")
-                    # S3 upload failed - abort transaction
                     return {
                         'success': False,
                         'errors': ["Failed to upload file to storage"],
                     }
             else:
-                # Not using S3 - just reference local path
                 s3_file_path = f'uploads/{filename}'
                 logger.info(f"💾 Local storage mode - path: {s3_file_path}")
 
-            # ✅ SECOND: Create database records
-            uploaded_file = UploadedFile.objects.create(
-                file=s3_file_path,  # S3 path or local reference
-            )
+            # Create uploaded file record
+            uploaded_file = UploadedFile.objects.create(file=s3_file_path)
 
-            parent_person = None
-            parent_saved_count = 0
-            children_saved = []  # ✅ Track all saved children
+            # Handle parent
+            if parent_exists and existing_parent:
+                # Reuse existing parent
+                parent_person = existing_parent
 
-            # Save parent (if exists)
-            if has_parent:
-                # ✅ Determine parent role properly
+                # Merge new loci
+                new_loci_added = _merge_loci_for_person(
+                    person=parent_person,
+                    new_loci_data=parent_loci,
+                    filename=filename,
+                    errors=errors,
+                    source_file=uploaded_file
+                )
+
+                # Link parent to new file
+                parent_person.uploaded_files.add(uploaded_file)
+
+                if new_loci_added > 0:
+                    logger.info(
+                        f"✅ Linked existing parent {parent_person.name} to new file {filename} "
+                        f"and added {new_loci_added} new loci (total now: {parent_person.loci_count})"
+                    )
+                else:
+                    logger.info(
+                        f"✅ Linked existing parent {parent_person.name} to new file {filename} "
+                        f"(no new loci)"
+                    )
+
+            else:
+                # Create new parent
+                parent_name = (parent_data.get('name') or '').strip() or 'Unknown'
+
+                # Determine parent role
                 if parent_role == 'unknown':
-                    # Try to get role from role_label
                     role_label = (parent_data.get('role_label', '') or '').lower()
 
                     if 'mother' in role_label or 'мати' in role_label or 'мать' in role_label:
                         parent_role = 'mother'
-                        logger.info(f"✅ Determined parent role: Mother (from role_label)")
                     elif 'father' in role_label or 'батько' in role_label or 'отец' in role_label:
                         parent_role = 'father'
-                        logger.info(f"✅ Determined parent role: Father (from role_label)")
                     else:
-                        # Check Amelogenin to determine gender
+                        # Check Amelogenin
                         amelogenin = next(
                             (l for l in parent_loci if l.get('locus_name', '').lower() == 'amelogenin'),
                             None
@@ -458,21 +543,14 @@ def save_dna_extraction_to_database(
                             allele_1 = str(amelogenin.get('allele_1', '')).upper()
                             allele_2 = str(amelogenin.get('allele_2', '')).upper()
 
-                            # X, Y = Male = Father
-                            # X, X = Female = Mother
                             if 'Y' in [allele_1, allele_2]:
                                 parent_role = 'father'
-                                logger.info(f"✅ Determined parent role: Father (Amelogenin: {allele_1}, {allele_2})")
                             else:
                                 parent_role = 'mother'
-                                logger.info(f"✅ Determined parent role: Mother (Amelogenin: {allele_1}, {allele_2})")
                         else:
-                            # Default to father if can't determine
                             parent_role = 'father'
-                            logger.warning(f"⚠️ Cannot determine parent gender in {filename}, defaulting to father")
 
                 parent_person = Person.objects.create(
-                    uploaded_file=uploaded_file,
                     role=parent_role,
                     name=parent_name,
                     loci_count=0
@@ -482,25 +560,26 @@ def save_dna_extraction_to_database(
                     person=parent_person,
                     loci_data=parent_loci,
                     filename=filename,
-                    errors=errors
+                    errors=errors,
+                    source_file=uploaded_file
                 )
 
                 parent_person.loci_count = parent_saved_count
                 parent_person.save()
+                parent_person.uploaded_files.add(uploaded_file)
 
                 logger.info(
-                    f"✅ Saved {parent_name} ({parent_role}) "
+                    f"✅ Created new parent {parent_name} ({parent_role}) "
                     f"with {parent_saved_count} STR loci"
                 )
 
-            # ✅ Save ALL children (if exist)
+            # Handle children (only NEW children)
             if has_children:
-                for idx, child_data in enumerate(children_data):
+                for idx, child_data in enumerate(new_children):
                     child_name = (child_data.get('name') or '').strip() or f'Unknown Child {idx + 1}'
                     child_loci = child_data.get('loci', [])
 
                     child_person = Person.objects.create(
-                        uploaded_file=uploaded_file,
                         role='child',
                         name=child_name,
                         loci_count=0
@@ -510,51 +589,23 @@ def save_dna_extraction_to_database(
                         person=child_person,
                         loci_data=child_loci,
                         filename=filename,
-                        errors=errors
+                        errors=errors,
+                        source_file=uploaded_file
                     )
 
                     child_person.loci_count = child_saved_count
                     child_person.save()
-
-                    children_saved.append({
-                        'id': child_person.id,
-                        'name': child_name,
-                        'loci_count': child_saved_count
-                    })
+                    child_person.uploaded_files.add(uploaded_file)
 
                     logger.info(
-                        f"✅ Saved {child_name} (child {idx + 1}) "
+                        f"✅ Saved NEW child {child_name} "
                         f"with {child_saved_count} STR loci"
                     )
 
-            # Check for errors during loci save
-            if errors:
-                logger.error(f"Errors found during loci save for {filename}: {errors}")
-                # Transaction will rollback automatically
-                return {
-                    'success': False,
-                    'errors': errors,
-                }
-
-            uploaded_file.save()
-
-            # ✅ THIRD: Everything saved successfully - clean up temp file
+            # Clean up temp file
             _cleanup_temp_file(local_file_path)
 
-            # ✅ Build success message
-            saved_info = []
-            if has_parent:
-                saved_info.append(f"Parent {parent_person.id} ({parent_saved_count} loci)")
-            if has_children:
-                for child in children_saved:
-                    saved_info.append(f"Child {child['id']} ({child['loci_count']} loci)")
-
-            logger.info(
-                f"✅ Successfully saved {filename}: "
-                f"Upload ID {uploaded_file.id}, "
-                f"S3 path: {s3_file_path}, "
-                f"{', '.join(saved_info)}"
-            )
+            logger.info(f"✅ Successfully saved {filename}: Upload ID {uploaded_file.id}")
 
             return {
                 'success': True,
@@ -564,7 +615,6 @@ def save_dna_extraction_to_database(
 
     except Exception as e:
         logger.error(f"Database save failed for {filename}: {e}", exc_info=True)
-
         return {
             'success': False,
             'errors': ["Server error occurred"],
@@ -687,3 +737,160 @@ def _fix_common_ocr_errors(locus_name: str) -> str:
 
     # Return as-is if no correction needed
     return locus_name
+
+
+def _build_fingerprint(loci_data, critical_loci):
+    """
+    Build DNA fingerprint from loci data
+
+    Args:
+        loci_data: List of locus dictionaries
+        critical_loci: List of locus names to use for fingerprint
+
+    Returns:
+        Dict mapping locus_name to sorted allele tuple
+    """
+    fingerprint = {}
+
+    for locus_data in loci_data:
+        locus_name = locus_data.get('locus_name')
+
+        # Skip gender markers
+        if locus_name and locus_name.lower() in GENDER_MARKERS:
+            continue
+
+        # Only use critical loci
+        if locus_name in critical_loci:
+            allele_1 = str(locus_data.get('allele_1', '')).strip()
+            allele_2 = str(locus_data.get('allele_2', '')).strip()
+
+            # Skip if empty
+            if allele_1 and allele_2:
+                alleles = tuple(sorted([allele_1, allele_2]))
+                fingerprint[locus_name] = alleles
+
+    return fingerprint
+
+
+def _compare_fingerprints(fp1, fp2, critical_loci):
+    """
+    Compare two DNA fingerprints
+
+    Args:
+        fp1: First fingerprint dict
+        fp2: Second fingerprint dict
+        critical_loci: List of locus names to compare
+
+    Returns:
+        Tuple of (matches, total_compared)
+    """
+    matches = 0
+    total = 0
+
+    for locus_name in critical_loci:
+        if locus_name in fp1 and locus_name in fp2:
+            total += 1
+            if fp1[locus_name] == fp2[locus_name]:
+                matches += 1
+
+    return matches, total
+
+
+def _merge_loci_for_person(
+        person: Person,
+        new_loci_data: List[Dict],
+        filename: str,
+        errors: List[str],
+        source_file: UploadedFile
+) -> int:
+    """
+    Merge new loci data into existing person
+    - If locus exists: verify alleles match, keep existing
+    - If locus is new: add it
+
+    Returns:
+        Number of NEW loci added
+    """
+    existing_loci = {
+        locus.locus_name: locus
+        for locus in person.loci.all()
+    }
+
+    new_loci_added = 0
+
+    for locus_data in new_loci_data:
+        locus_name = locus_data.get('locus_name')
+
+        # Skip gender markers
+        if locus_name and locus_name.lower() in GENDER_MARKERS:
+            continue
+
+        # Auto-correct OCR errors
+        locus_name = _fix_common_ocr_errors(locus_name)
+
+        # Get alleles
+        allele_1 = locus_data.get('allele_1')
+        allele_2 = locus_data.get('allele_2')
+
+        # Skip empty loci
+        if allele_1 is None or allele_2 is None or allele_1 == '' or allele_2 == '':
+            continue
+
+        # Validate locus name
+        if locus_name not in DNALocus.LOCUS_NAMES:
+            error_msg = f"Invalid locus name: {locus_name}"
+            if error_msg not in errors:
+                errors.append(error_msg)
+            continue
+
+        # Check if this locus already exists
+        if locus_name in existing_loci:
+            # ✅ Verify alleles match
+            existing_locus = existing_loci[locus_name]
+            new_allele_1 = str(allele_1).strip()
+            new_allele_2 = str(allele_2).strip()
+            existing_allele_1 = str(existing_locus.allele_1).strip()
+            existing_allele_2 = str(existing_locus.allele_2).strip()
+
+            existing_alleles = set([existing_allele_1, existing_allele_2])
+            new_alleles = set([new_allele_1, new_allele_2])
+
+            if existing_alleles != new_alleles:
+                logger.warning(
+                    f"⚠️ Allele mismatch for {person.name} locus {locus_name}: "
+                    f"Existing={existing_alleles} (from {existing_locus.source_file.file if existing_locus.source_file else 'unknown'}), "
+                    f"New={new_alleles} (from {filename}). "
+                    f"Keeping existing version."
+                )
+            else:
+                logger.debug(f"Locus {locus_name} already exists for {person.name} with matching alleles, skipping")
+
+            continue
+
+        # Add new locus
+        try:
+            DNALocus.objects.create(
+                person=person,
+                locus_name=locus_name,
+                allele_1=str(allele_1),
+                allele_2=str(allele_2),
+                source_file=source_file
+            )
+            new_loci_added += 1
+            logger.info(f"✅ Added new locus {locus_name} to existing person {person.name} (from {filename})")
+
+        except Exception as e:
+            error_msg = f"Failed to save {locus_name}: {str(e)}"
+            if error_msg not in errors:
+                errors.append(error_msg)
+
+    # Update person's loci count
+    if new_loci_added > 0:
+        person.loci_count = person.loci.count()
+        person.save()
+        logger.info(
+            f"✅ Updated {person.name}: added {new_loci_added} new loci from {filename} "
+            f"(total now: {person.loci_count})"
+        )
+
+    return new_loci_added

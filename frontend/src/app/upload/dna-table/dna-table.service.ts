@@ -36,6 +36,12 @@ export class DnaTableHttpService {
     return this.http.patch<void>(`${this.apiUrl}/upload/loci/${id}/`, data);
   }
 
+  deletePerson(personId: number): Observable<{ success: boolean; message: string }> {
+    return this.http.delete<{ success: boolean; message: string }>(
+      `${this.apiUrl}/upload/person/${personId}/`
+    );
+  }
+
   deleteUpload(uploadId: number): Observable<{ success: boolean; message: string }> {
     return this.http.delete<{ success: boolean; message: string }>(
       `${this.apiUrl}/upload/file/${uploadId}/`
