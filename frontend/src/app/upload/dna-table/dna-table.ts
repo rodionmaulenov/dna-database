@@ -62,12 +62,14 @@ export class DnaTable implements OnInit {
     return row.personId;
   }
 
-  ngOnInit() {
-    this.store.loadTableData({ page: 1 });
-
+  constructor() {
     effect(() => {
       this.dataSource.data = this.store.filteredTableData();
     });
+  }
+
+  ngOnInit() {
+    this.store.loadTableData({ page: 1 });
   }
 
   getFiles(element: TableRowData): Array<{ id: number; file: string; uploaded_at: string }> {
