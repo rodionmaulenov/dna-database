@@ -30,7 +30,7 @@ export function withLocalFilterFeature(
         setLoading(true);
         setRemotePersonIds(personId.toString());
         setRemotePersonNames(personName);
-        resetForm();
+        // resetForm();
 
         const newRoleFilter = personRole === 'child' ? 'child' : 'parent';
 
@@ -59,7 +59,7 @@ export function withLocalFilterFeature(
         } else {
           patchState(store, {localRoleFilter: 'parent'});
         }
-        resetForm();
+        // resetForm();
         reload();
       },
 
@@ -68,7 +68,7 @@ export function withLocalFilterFeature(
         setRemotePersonIds(null);
         setRemotePersonNames(null);
         patchState(store, {localRoleFilter: 'parent'});
-        resetForm();
+        // resetForm();
         reload();
       }
     })),

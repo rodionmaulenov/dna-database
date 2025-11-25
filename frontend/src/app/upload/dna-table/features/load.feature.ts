@@ -161,14 +161,6 @@ export function withLoadFeature() {
         }),
 
         hasRecords: computed(() => store.dnaRecordsEntities().length > 0),
-
-        dnaRecordsCurrentPage: computed(() => ({
-          entities: () => store.dnaRecordsEntities(),
-          isLoading: () => store.isLoading(),
-          total: () => store.total(),
-          pageIndex: () => store.pageIndex(),
-          pageSize: () => store.pageSize()
-        }))
       };
     })
   );
