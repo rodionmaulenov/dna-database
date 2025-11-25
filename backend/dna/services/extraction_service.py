@@ -144,6 +144,63 @@ def detect_laboratory(all_tables: list) -> str:
         return 'unknown'
 
 
+def detect_table_language(table: list[list[str]]) -> str:
+    """Detect if table is English or Ukrainian"""
+    if not table:
+        return 'unknown'
+
+    text = ' '.join([' '.join(row) for row in table]).lower()
+
+    english_markers = ['alleged father', 'alleged mother', 'child', 'locus']
+    english_count = sum(1 for marker in english_markers if marker in text)
+
+    ukrainian_markers = ['батько', 'мати', 'дитина', 'локус']
+    ukrainian_count = sum(1 for marker in ukrainian_markers if marker in text)
+
+    if english_count > ukrainian_count:
+        return 'english'
+    elif ukrainian_count > english_count:
+        return 'ukrainian'
+    else:
+        return 'unknown'
+
+
+def select_best_dna_table(all_tables: list[list[list[str]]]) -> tuple:
+    """Select best table: English > Largest"""
+    if not all_tables:
+        return None, 'no_tables'
+
+    if len(all_tables) == 1:
+        return all_tables[0], 'only_one'
+
+    scored_tables = []
+
+    for table in all_tables:
+        if not table or not table[0]:
+            continue
+
+        size = len(table) * len(table[0])
+        language = detect_table_language(table)
+
+        score = size
+        if language == 'english':
+            score += 10000  # Prefer English
+        elif language == 'ukrainian':
+            score += 5000
+
+        scored_tables.append({
+            'table': table,
+            'score': score,
+            'language': language
+        })
+
+    if not scored_tables:
+        return None, 'no_valid'
+
+    best = max(scored_tables, key=lambda x: x['score'])
+    return best['table'], best['language']
+
+
 # ============================================================
 # TEXTRACT PARSING
 # ============================================================
@@ -373,100 +430,78 @@ Return ONLY valid JSON (no markdown, no explanation):
 # ============================================================
 
 def extract_from_pdf(pdf_path: str) -> dict:
-    """
-    Main extraction function.
-
-    Args:
-        pdf_path: Path to PDF file
-
-    Returns:
-        {
-            'success': True/False,
-            'persons': [...],
-            'laboratory': 'eurolab',
-            'loci_count': 16,
-            'fixes_applied': [...]
-        }
-    """
+    """Extract DNA data from PDF"""
     logger.info(f"📄 Starting extraction from: {pdf_path}")
 
-    # Step 1: Convert PDF to image
+    # Convert PDF to images (all pages)
     images = process_dna_report_pdf(
-        pdf_path,
-        enhance=False,
-        detect_tables=True,
-        best_page_only=True
+        pdf_path=pdf_path,
+        enhance=True,
+        detect_tables=False,
+        textract_client=None,
+        best_page_only=False
     )
 
     if not images:
-        logger.error("No DNA table found in PDF")
-        return {'success': False, 'error': 'No DNA table found in PDF'}
+        return {'success': False, 'error': 'No images generated'}
 
-    # Step 2: Extract with Textract
-    logger.info("🔍 Extracting with Textract...")
+    logger.info(f"📄 Processing {len(images)} page(s)")
+
+    # Extract tables from all pages
     textract = TextractService()
-    raw_response = textract.extract_raw(images[0])
-    blocks = raw_response.get('Blocks', [])
+    all_pages_tables = []
+    textract_cost = 0.0015 * len(images)
 
-    # Step 3: Parse all tables
-    all_tables = extract_all_tables_from_textract(blocks)
+    for idx, image in enumerate(images):
+        logger.info(f"🔍 Page {idx + 1}/{len(images)}")
+        raw_response = textract.extract_raw(image)
+        blocks = raw_response.get('Blocks', [])
 
-    if not all_tables:
-        logger.error("No tables found in document")
-        return {'success': False, 'error': 'No tables found in document'}
+        page_tables = extract_all_tables_from_textract(blocks)
+        if page_tables:
+            all_pages_tables.extend(page_tables)
 
-    # Find largest table (DNA locus table)
-    table = max(all_tables, key=lambda t: len(t) * len(t[0]) if t and t[0] else 0)
+    if not all_pages_tables:
+        return {'success': False, 'error': 'No tables found'}
 
-    logger.info(f"📊 Found {len(all_tables)} tables, using largest: {len(table)} rows x {len(table[0])} cols")
+    # Select best table (English preferred)
+    table, language = select_best_dna_table(all_pages_tables)
+
+    if not table:
+        return {'success': False, 'error': 'No valid table'}
+
+    logger.info(f"✅ Selected {language} table from {len(all_pages_tables)} tables")
 
     # Detect laboratory
-    laboratory = detect_laboratory(all_tables)
-    logger.info(f"🏥 Detected laboratory: {laboratory}")
+    laboratory = detect_laboratory(all_pages_tables)
 
-    # Step 4: Find table structure
+    # Parse table
     header_row, role_row, data_start_row = find_header_and_role_rows(table)
-    logger.info(f"Header row: {header_row}, Role row: {role_row}, Data starts: {data_start_row}")
-
-    # Step 5: Parse DNA table
     persons = parse_dna_table(table, data_start_row, role_row, header_row)
-    logger.info(f"👥 Found {len(persons)} persons")
 
-    # Remove 'col' from persons for validation
     persons_for_validation = [
         {'name': p['name'], 'role': p['role'], 'alleles': p['alleles']}
         for p in persons
     ]
 
-    # Step 6: Validate with Claude
-    logger.info("🤖 Validating with Claude AI...")
+    # Validate with Claude
     claude_cost = 0.0
     claude_tokens = {}
     try:
-        validated = validate_with_claude(persons_for_validation, table, all_tables)
-
-        for fix in validated.get('fixes_applied', []):
-            logger.info(f"🔧 Fix: {fix}")
-
+        validated = validate_with_claude(persons_for_validation, table, all_pages_tables)
         response_persons = validated['persons']
         fixes_applied = validated.get('fixes_applied', [])
         claude_cost = validated.get('claude_cost', 0.0)
         claude_tokens = validated.get('claude_tokens', {})
-
     except Exception as e:
-        logger.error(f"❌ Claude validation failed: {e}")
+        logger.error(f"Claude failed: {e}")
         response_persons = persons_for_validation
         fixes_applied = []
 
-    # Calculate total cost
-    textract_cost = 0.0015  # ~$0.0015 per page
     total_cost = textract_cost + claude_cost
 
-    # Log results with cost
-    logger.info(f"✅ Extraction complete:")
-    for person in response_persons:
-        logger.info(f"  {person['name']} ({person['role']}): {len(person['alleles'])} loci")
-    logger.info(f"💰 Cost: Textract ~${textract_cost:.4f}, Claude ~${claude_cost:.4f}, Total ~${total_cost:.4f}")
+    logger.info(f"✅ Extraction complete")
+    logger.info(f"💰 Total cost: ${total_cost:.4f}")
 
     return {
         'success': True,
@@ -481,7 +516,6 @@ def extract_from_pdf(pdf_path: str) -> dict:
             'claude_tokens': claude_tokens,
         }
     }
-
 
 # ============================================================
 # FORMAT CONVERTER

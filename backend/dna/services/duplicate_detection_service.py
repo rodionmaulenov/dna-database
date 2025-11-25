@@ -133,10 +133,10 @@ def _find_matching_parent(
 
         match_percentage = (matches / total_compared) * 100
 
-        logger.info(
-            f"  Comparing with {candidate.name}: "
-            f"{matches}/{total_compared} loci match exactly ({match_percentage:.1f}%)"
-        )
+        # logger.info(
+        #     f"  Comparing with {candidate.name}: "
+        #     f"{matches}/{total_compared} loci match exactly ({match_percentage:.1f}%)"
+        # )
 
         # Parent match: 80%+ exact match
         if total_compared >= 4 and match_percentage >= 80:
