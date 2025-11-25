@@ -7,10 +7,6 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     build-essential \
     libpq-dev \
-    tesseract-ocr \
-    tesseract-ocr-eng \
-    tesseract-ocr-ukr \
-    tesseract-ocr-rus \
     poppler-utils \
     libgl1 \
     libglib2.0-0 \

@@ -172,9 +172,7 @@
                     </a>
                     <button class="file-delete-btn"
                             (click)="confirmDeleteFile(element, file, idx)"
-                            [disabled]="store.deletingFileId() === file.id"
-                            matTooltip="Delete file"
-                            matTooltipPosition="above">
+                            [disabled]="store.deletingFileId() === file.id">
                       <mat-icon>close</mat-icon>
                     </button>
                   </div>

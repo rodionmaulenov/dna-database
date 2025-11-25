@@ -3,17 +3,68 @@ PDF Processing Utility for DNA Report Extraction
 Converts PDF to images and enhances quality for better AI recognition
 """
 import os
-import re
+import io
 import logging
 import cv2
 import numpy as np
 
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 from PIL import Image
 from pdf2image import convert_from_path
 
 logger = logging.getLogger(__name__)
+
+
+def detect_dna_page_with_textract(image: Image.Image, textract_client) -> Tuple[bool, int]:
+    """
+    Fast detection using AWS Textract (1-2 seconds per page)
+
+    Args:
+        image: PIL Image of page
+        textract_client: Boto3 Textract client
+
+    Returns:
+        (is_dna_page: bool, score: int)
+    """
+    try:
+        # Convert PIL image to bytes
+        img_bytes = io.BytesIO()
+        image.save(img_bytes, format='PNG')
+        img_bytes.seek(0)
+
+        # Call Textract
+        response = textract_client.analyze_document(
+            Document={'Bytes': img_bytes.read()},
+            FeatureTypes=['TABLES']
+        )
+
+        # Extract all text
+        text = ''
+        for block in response.get('Blocks', []):
+            if block.get('Text'):
+                text += block['Text'].lower() + ' '
+
+        # DNA keywords for scoring
+        dna_keywords = [
+            'd3s1358', 'd8s1179', 'd21s11', 'd7s820', 'vwa', 'fga',
+            'tpox', 'csf1po', 'd5s818', 'd16s539', 'd13s317', 'd2s1338',
+            'locus', 'allele', 'father', 'mother', 'child', 'paternity',
+            'amelogenin', 'penta'
+        ]
+
+        # Count matches
+        score = sum(keyword in text for keyword in dna_keywords)
+
+        # DNA page if 3+ keywords found
+        is_dna_page = score >= 3
+
+        logger.info(f"Textract detection: score={score}, is_dna_page={is_dna_page}")
+        return is_dna_page, score
+
+    except Exception as e:
+        logger.error(f"Textract detection failed: {e}")
+        return True, 0  # Fallback: assume it's a DNA page
 
 
 class PDFProcessor:
@@ -112,187 +163,12 @@ class PDFProcessor:
         # If width > height, it's landscape - rotate 90 degrees
         if width > height:
             logger.info(f"Image is landscape ({width}x{height}), rotating to portrait")
-            # Rotate 90 degrees counter-clockwise
             rotated = image.rotate(90, expand=True)
             logger.info(f"Rotated to portrait: {rotated.size}")
             return rotated
 
         logger.debug(f"Image already in portrait orientation ({width}x{height})")
         return image
-
-    @staticmethod
-    def detect_dna_table_pages(images: List[Image.Image], return_best_only: bool = False,
-                               prefer_english: bool = True) -> List[int]:
-        """
-        Detect which pages contain DNA tables using multiple strategies
-
-        Args:
-            images: List of PIL images (one per page)
-            return_best_only: If True, return only the page with highest score
-            prefer_english: If True, prefer English pages over Ukrainian/other languages
-
-        Returns:
-            List of page indices that contain DNA tables
-        """
-        try:
-            import pytesseract
-        except ImportError:
-            logger.warning("⚠️ pytesseract not installed, processing all pages")
-            return list(range(len(images)))
-
-        logger.info(f"Analyzing {len(images)} pages to detect DNA tables...")
-
-        dna_table_pages = []
-        page_scores = []
-        page_texts = {}  # Store OCR text for language detection
-
-        # ⭐ DEFINE KEYWORDS
-        table_keywords = [
-            # Column headers
-            'locus', 'локус', 'locul',
-            'allele', 'алель', 'allelă',
-            'father', 'батько', 'alleged father', 'передбачуваний батько',
-            'mother', 'мати', 'anya', 'ана',
-            'child', 'дитина', 'дитя', 'copil',
-
-            # Common locus names
-            'd3s1358', 'd8s1179', 'd21s11', 'd7s820', 'd16s539',
-            'vwa', 'fga', 'tpox', 'csf1po', 'd18s51', 'd5s818',
-            'd13s317', 'd2s1338', 'penta', 'amelogenin', 'амелогенін',
-
-            # Report-specific terms
-            'paternity', 'батькість', 'paternitate',
-            'dna test', 'днк тест', 'днк-тест',
-            'genotype', 'генотип',
-            'материнство', 'maternity',
-            'combined paternity index', 'комбінований індекс'
-        ]
-
-        # ⭐ DEFINE PATTERNS
-        locus_pattern = re.compile(r'd\d{1,2}s\d{3,4}', re.IGNORECASE)
-        allele_pattern = re.compile(r'\b\d{1,2}(?:\.\d)?\s*[,/]\s*\d{1,2}(?:\.\d)?\b')
-
-        for idx, image in enumerate(images):
-            page_num = idx + 1
-            score = 0
-
-            try:
-                # Quick OCR
-                text = pytesseract.image_to_string(image, lang='eng+ukr+rus').lower()
-                text_clean = ' '.join(text.split())
-                page_texts[idx] = text_clean  # Store for language detection
-
-                # SCORING SYSTEM
-
-                # 1. Keyword matching (1 point per keyword, max 15)
-                keyword_matches = sum(1 for keyword in table_keywords if keyword in text_clean)
-                keyword_score = min(keyword_matches, 15)
-                score += keyword_score
-
-                # 2. Locus pattern matching (5 points per match, max 25)
-                locus_matches = locus_pattern.findall(text_clean)
-                locus_score = min(len(locus_matches) * 5, 25)
-                score += locus_score
-
-                # 3. Allele pattern matching (2 points per match, max 20)
-                allele_matches = allele_pattern.findall(text)
-                allele_score = min(len(allele_matches) * 2, 20)
-                score += allele_score
-
-                # 4. Table structure detection (10 points)
-                if '|' in text or '\t' in text or text.count('\n') > 15:
-                    score += 10
-
-                # 5. Numbers concentration (10 points if > 10% digits)
-                digit_count = sum(c.isdigit() for c in text)
-                digit_ratio = digit_count / max(len(text), 1)
-                if digit_ratio > 0.1:
-                    score += 10
-
-                # ⭐ DECISION LOGIC
-                has_loci = len(locus_matches) > 0
-                has_alleles = len(allele_matches) > 5
-                threshold = 30
-
-                if score >= threshold and (has_loci or has_alleles):
-                    logger.info(
-                        f"✅ Page {page_num}: DNA table detected "
-                        f"(score: {score}, keywords: {keyword_matches}, "
-                        f"loci: {len(locus_matches)}, alleles: {len(allele_matches)})"
-                    )
-                    dna_table_pages.append(idx)
-                    page_scores.append((idx, score))
-                else:
-                    logger.info(
-                        f"⏭️ Page {page_num}: Not a DNA table "
-                        f"(score: {score}, keywords: {keyword_matches}, "
-                        f"loci: {len(locus_matches)}, alleles: {len(allele_matches)})"
-                    )
-
-            except Exception as e:
-                logger.warning(f"⚠️ Page {page_num}: Detection failed, including it: {e}")
-                dna_table_pages.append(idx)
-                page_scores.append((idx, 0))
-
-        # ⭐ SELECT BEST PAGE WITH LANGUAGE PREFERENCE
-        if return_best_only and len(page_scores) > 1:
-            english_pages = []
-            ukrainian_pages = []
-
-            # English markers
-            english_markers = ['alleged father', 'alleged mother', 'child', 'locus', 'relationship index']
-            # Ukrainian markers
-            ukrainian_markers = ['батько', 'мати', 'дитина', 'локус', 'індекс спорідненості']
-
-            for idx, score in page_scores:
-                text = page_texts.get(idx, '')
-
-                # Count markers
-                english_count = sum(1 for marker in english_markers if marker in text)
-                ukrainian_count = sum(1 for marker in ukrainian_markers if marker in text)
-
-                if english_count > ukrainian_count:
-                    english_pages.append((idx, score))
-                    logger.info(f"📄 Page {idx + 1}: English (markers: {english_count})")
-                elif ukrainian_count > english_count:
-                    ukrainian_pages.append((idx, score))
-                    logger.info(f"📄 Page {idx + 1}: Ukrainian (markers: {ukrainian_count})")
-                else:
-                    # If equal, check for specific patterns
-                    if 'alleged' in text:
-                        english_pages.append((idx, score))
-                        logger.info(f"📄 Page {idx + 1}: English (fallback)")
-                    else:
-                        ukrainian_pages.append((idx, score))
-                        logger.info(f"📄 Page {idx + 1}: Ukrainian (fallback)")
-
-            # Select based on preference
-            if prefer_english and english_pages:
-                best = max(english_pages, key=lambda x: x[1])
-                logger.info(f"🎯 Selected ENGLISH page: Page {best[0] + 1} (score: {best[1]})")
-                return [best[0]]
-            elif ukrainian_pages:
-                best = max(ukrainian_pages, key=lambda x: x[1])
-                logger.info(f"🎯 Selected UKRAINIAN page: Page {best[0] + 1} (score: {best[1]})")
-                return [best[0]]
-            else:
-                # Fallback to highest score
-                best = max(page_scores, key=lambda x: x[1])
-                logger.info(f"🎯 Selected page by score: Page {best[0] + 1} (score: {best[1]})")
-                return [best[0]]
-
-        # Single page or return all
-        if return_best_only and len(page_scores) == 1:
-            logger.info(f"🎯 Only one DNA page found: Page {page_scores[0][0] + 1}")
-            return [page_scores[0][0]]
-
-        # Fallback: if no pages detected, include all
-        if len(dna_table_pages) == 0:
-            logger.warning("⚠️ No DNA tables detected, processing all pages as fallback")
-            dna_table_pages = list(range(len(images)))
-
-        logger.info(f"📊 Result: {len(dna_table_pages)}/{len(images)} pages will be processed")
-        return dna_table_pages
 
     @staticmethod
     def _deskew_image(image: np.ndarray) -> np.ndarray:
@@ -326,11 +202,9 @@ class PDFProcessor:
 
             # Only apply rotation if angle is significant (> 0.5 degrees)
             if abs(angle) > 0.5:
-                # Get image dimensions
                 (h, w) = image.shape[:2]
                 center = (w // 2, h // 2)
 
-                # Perform rotation
                 M = cv2.getRotationMatrix2D(center, angle, 1.0)
                 rotated = cv2.warpAffine(
                     image, M, (w, h),
@@ -359,7 +233,6 @@ class PDFProcessor:
             Denoised image
         """
         try:
-            # Use Non-local Means Denoising
             denoised = cv2.fastNlMeansDenoising(image, None, h=10, templateWindowSize=7, searchWindowSize=21)
             logger.info("Applied denoising filter")
             return denoised
@@ -380,11 +253,9 @@ class PDFProcessor:
             Contrast-enhanced image
         """
         try:
-            # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
             clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
             enhanced = clahe.apply(image)
 
-            # Apply slight sharpening
             kernel = np.array([[-1, -1, -1],
                                [-1, 9, -1],
                                [-1, -1, -1]])
@@ -410,7 +281,8 @@ class PDFProcessor:
     def process_pdf(self, pdf_path: str,
                     enhance: bool = True,
                     detect_tables: bool = True,
-                    return_best_page_only: bool = False,  # ✅ NEW parameter
+                    textract_client=None,
+                    return_best_page_only: bool = False,
                     save_images: bool = False,
                     output_dir: str = None) -> List[Image.Image]:
         """
@@ -419,10 +291,11 @@ class PDFProcessor:
         Args:
             pdf_path: Path to PDF file
             enhance: Apply image enhancement
-            detect_tables: Use smart detection to only process DNA table pages
-            return_best_page_only: If True, return only the best DNA page (not all matches)
+            detect_tables: Use Textract detection to filter DNA table pages
+            textract_client: Textract client for fast detection (if None, process all pages)
+            return_best_page_only: If True, return only the best DNA page
             save_images: Save processed images to disk
-            output_dir: Directory to save images (if save_images=True)
+            output_dir: Directory to save images
 
         Returns:
             List of processed PIL Images
@@ -430,27 +303,51 @@ class PDFProcessor:
         # Convert PDF to images
         images = self.convert_pdf_to_images(pdf_path)
 
-        # ⭐ Smart detection: Filter to only DNA table pages
-        if detect_tables:
-            logger.info("Detecting DNA table pages...")
-            dna_page_indices = self.detect_dna_table_pages(
-                images,
-                return_best_only=return_best_page_only  # ✅ Pass parameter
-            )
-            images = [images[i] for i in dna_page_indices if i < len(images)]
+        # ✅ Fast Textract-based detection
+        if detect_tables and textract_client:
+            logger.info(f"Detecting DNA table pages with Textract...")
+
+            dna_pages = []
+            page_scores = []
+
+            for idx, img in enumerate(images):
+                is_dna, score = detect_dna_page_with_textract(img, textract_client)
+                if is_dna:
+                    dna_pages.append(idx)
+                    page_scores.append((idx, score))
+                    logger.info(f"✅ Page {idx + 1}: DNA table (score: {score})")
+                else:
+                    logger.info(f"⏭️ Page {idx + 1}: Not DNA table (score: {score})")
+
+            # If no pages detected, process all
+            if not dna_pages:
+                logger.warning("⚠️ No DNA tables detected, processing all pages")
+                dna_pages = list(range(len(images)))
+
+            # Select best page if requested
+            if return_best_page_only and len(page_scores) > 1:
+                best = max(page_scores, key=lambda x: x[1])
+                dna_pages = [best[0]]
+                logger.info(f"🎯 Selected best page: {best[0] + 1} (score: {best[1]})")
+
+            # Filter images
+            images = [images[i] for i in dna_pages]
             logger.info(f"Processing {len(images)} DNA table pages")
+
+        elif detect_tables:
+            # No textract client provided - process all pages
+            logger.info(f"No Textract client, processing all {len(images)} pages")
 
         # Auto-rotate and enhance each image
         processed_images = []
         for idx, img in enumerate(images):
             logger.info(f"Processing page {idx + 1}/{len(images)}")
 
-            # First, rotate to portrait if needed
+            # Rotate to portrait
             rotated = self.auto_rotate_to_portrait(img)
 
-            # Then enhance if requested
+            # Enhance if requested
             if enhance:
-                logger.info(f"Enhancing page {idx + 1}/{len(images)}")
                 enhanced = self.enhance_image(
                     rotated,
                     deskew=False,
@@ -471,7 +368,6 @@ class PDFProcessor:
     def _save_images(images: List[Image.Image], pdf_path: str, output_dir: str):
         """Save images to disk"""
         os.makedirs(output_dir, exist_ok=True)
-
         pdf_name = Path(pdf_path).stem
 
         for idx, img in enumerate(images):
@@ -480,63 +376,16 @@ class PDFProcessor:
             logger.info(f"Saved enhanced image: {output_path}")
 
 
-# ⭐ STANDALONE FUNCTIONS (for tasks.py)
+# ⭐ STANDALONE FUNCTIONS
 
 def pdf_to_images(pdf_path: str, dpi: int = 300) -> List[Image.Image]:
-    """
-    Convert PDF to images
-
-    Args:
-        pdf_path: Path to PDF file
-        dpi: Resolution (default 300)
-
-    Returns:
-        List of PIL Images
-    """
+    """Convert PDF to images"""
     processor = PDFProcessor(dpi=dpi)
     return processor.convert_pdf_to_images(pdf_path)
 
 
-def detect_dna_table_pages(images: List[Image.Image]) -> List[int]:
-    """
-    Detect which pages contain DNA tables
-
-    Args:
-        images: List of PIL images
-
-    Returns:
-        List of page indices with DNA tables
-    """
-    processor = PDFProcessor()
-    return processor.detect_dna_table_pages(images)
-
-
-def filter_images_by_pages(images: List[Image.Image], page_indices: List[int]) -> List[Image.Image]:
-    """
-    Filter images to only include specified pages
-
-    Args:
-        images: All page images
-        page_indices: Indices to keep
-
-    Returns:
-        Filtered list of images
-    """
-    filtered = [images[i] for i in page_indices if i < len(images)]
-    logger.info(f"Filtered to {len(filtered)} images from {len(images)}")
-    return filtered
-
-
 def enhance_image_for_ocr(image: Image.Image) -> Image.Image:
-    """
-    Enhance single image for OCR/AI
-
-    Args:
-        image: PIL Image
-
-    Returns:
-        Enhanced PIL Image
-    """
+    """Enhance single image for OCR/AI"""
     processor = PDFProcessor()
     rotated = processor.auto_rotate_to_portrait(image)
     enhanced = processor.enhance_image(
@@ -552,15 +401,17 @@ def process_dna_report_pdf(
     pdf_path: str,
     enhance: bool = True,
     detect_tables: bool = True,
-    best_page_only: bool = False  # ✅ NEW parameter
+    textract_client=None,
+    best_page_only: bool = False
 ) -> List[Image.Image]:
     """
-    Convenience function to process DNA report PDF
+    Process DNA report PDF with Textract detection
 
     Args:
         pdf_path: Path to PDF file
-        enhance: Apply image enhancement (recommended for DNA reports)
-        detect_tables: Use smart detection to filter DNA table pages
+        enhance: Apply image enhancement
+        detect_tables: Use Textract detection
+        textract_client: Textract client for detection
         best_page_only: If True, return only the best DNA page
 
     Returns:
@@ -571,6 +422,7 @@ def process_dna_report_pdf(
         pdf_path,
         enhance=enhance,
         detect_tables=detect_tables,
-        return_best_page_only=best_page_only  # ✅ Pass parameter
+        textract_client=textract_client,
+        return_best_page_only=best_page_only
     )
     return images
