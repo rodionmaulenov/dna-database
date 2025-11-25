@@ -523,22 +523,8 @@ def extract_from_pdf(pdf_path: str) -> dict:
 
 def convert_to_save_format(extraction_result: dict) -> dict:
     """
-    Convert extract_from_pdf() output to save_dna_extraction_to_database() format.
-
-    Input format (from extract_from_pdf):
-        {
-            'persons': [
-                {'name': '...', 'role': 'father', 'alleles': {'D3S1358': ['15', '16'], ...}},
-                {'name': '...', 'role': 'child', 'alleles': {...}},
-            ]
-        }
-
-    Output format (for save_dna_extraction_to_database):
-        {
-            'parent': {'name': '...', 'loci': [{'locus_name': 'D3S1358', 'allele_1': '15', 'allele_2': '16'}]},
-            'parent_role': 'father',
-            'children': [{'name': '...', 'loci': [...]}],
-        }
+    Convert extract_from_pdf() output to save format.
+    Priority: Father > Mother (paternity tests focus on father)
     """
     persons = extraction_result.get('persons', [])
 
@@ -547,6 +533,9 @@ def convert_to_save_format(extraction_result: dict) -> dict:
         'parent_role': 'unknown',
         'children': [],
     }
+
+    father_data = None
+    mother_data = None
 
     for person in persons:
         name = person.get('name', 'Unknown')
@@ -567,11 +556,21 @@ def convert_to_save_format(extraction_result: dict) -> dict:
 
         person_data = {'name': name, 'loci': loci}
 
-        if role in ('father', 'mother'):
-            result['parent'] = person_data
-            result['parent_role'] = role
+        # ✅ Store father and mother separately
+        if role == 'father':
+            father_data = person_data
+        elif role == 'mother':
+            mother_data = person_data
         elif role == 'child':
             result['children'].append(person_data)
+
+    # ✅ Prioritize father over mother
+    if father_data:
+        result['parent'] = father_data
+        result['parent_role'] = 'father'
+    elif mother_data:
+        result['parent'] = mother_data
+        result['parent_role'] = 'mother'
 
     return result
 
