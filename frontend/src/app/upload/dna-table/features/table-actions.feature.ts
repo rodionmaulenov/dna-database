@@ -215,6 +215,18 @@ export function withTableActionsFeature(
 
           const deletedLociIds = getDeletedLoci(row.personId);
 
+          console.log('🗑️ Deleted loci IDs:', deletedLociIds);
+          console.log('📤 Sending update:', {
+            personId: row.personId,
+            updates: {
+              name: nameUpdate,
+              role: roleUpdate,
+              loci: lociUpdates,
+              new_loci: newLoci,
+              deleted_loci_ids: deletedLociIds
+            }
+          });
+
           // ✅ Check if anything to update
           const hasChanges = nameUpdate !== undefined ||
             roleUpdate !== undefined ||
