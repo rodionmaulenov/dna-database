@@ -15,6 +15,13 @@ person_router = Router()
 @person_router.patch('update/{person_id}/', response={200: UpdatePersonResponse, 400: dict, 404: dict, 422: dict, 500: dict})
 def update_person(request, person_id: int, data: UpdatePersonRequest):
     """Update person name, role, and loci"""
+    # ✅ ADD THIS AT THE TOP
+    logger.info(f"📝 Updating person {person_id}")
+    logger.info(f"   Name: {data.name}")
+    logger.info(f"   Role: {data.role}")
+    logger.info(f"   Loci updates: {len(data.loci) if data.loci else 0}")
+    logger.info(f"   New loci: {len(data.new_loci) if data.new_loci else 0}")
+    logger.info(f"   Deleted loci IDs: {data.deleted_loci_ids}")
     try:
         person = get_object_or_404(Person, id=person_id)
         updated_fields = []
