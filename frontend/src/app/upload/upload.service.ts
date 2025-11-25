@@ -16,10 +16,7 @@ export class UploadService {
     const formData = new FormData();
     formData.append('file', file);
 
-    return this.http.post<FileUploadResponse>(
-      `${this.apiUrl}/upload/file/`,
-      formData
-    );
+    return this.http.post<FileUploadResponse>(`${this.apiUrl}/dna/upload/file/`, formData);
   }
 
   matchFile(file: File, role: string): Observable<FileUploadResponse> {
@@ -27,10 +24,6 @@ export class UploadService {
     formData.append('file', file);
     formData.append('role', role);
 
-    return this.http.post<FileUploadResponse>(
-      `${this.apiUrl}/upload/match/`,
-      formData
-    );
+    return this.http.post<FileUploadResponse>(`${this.apiUrl}/dna/upload/match/`, formData);
   }
 }
-

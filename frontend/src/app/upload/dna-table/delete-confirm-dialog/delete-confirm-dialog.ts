@@ -3,6 +3,14 @@ import {MAT_DIALOG_DATA, MatDialogModule} from '@angular/material/dialog';
 import {MatButtonModule} from '@angular/material/button';
 import {MatIconModule} from '@angular/material/icon';
 
+export interface DeleteConfirmData {
+  type: 'person' | 'file';
+  name?: string;
+  role?: string;
+  lociCount?: number;
+  fileIndex?: number;
+}
+
 @Component({
   selector: 'delete-confirm-dialog',
   standalone: true,
@@ -35,10 +43,15 @@ import {MatIconModule} from '@angular/material/icon';
       </div>
     </h2>
     <mat-dialog-content>
-      <p><strong>Are you sure you want to delete this record?</strong></p>
-      <p>Name: {{ data.name }}</p>
-      <p>Role: {{ data.role }}</p>
-      <p>Loci: {{ data.lociCount }}</p>
+      @if (data.type === 'person') {
+        <p><strong>Are you sure you want to delete this record?</strong></p>
+        <p>Name: {{ data.name }}</p>
+        <p>Role: {{ data.role }}</p>
+        <p>Loci: {{ data.lociCount }}</p>
+      } @else {
+        <p><strong>Are you sure you want to delete file {{ data.fileIndex }}?</strong></p>
+        <p>This may remove persons linked only to this file.</p>
+      }
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button [mat-dialog-close]="false">Cancel</button>
@@ -50,5 +63,5 @@ import {MatIconModule} from '@angular/material/icon';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class DeleteConfirmDialog {
-  data = inject(MAT_DIALOG_DATA);
+  data: DeleteConfirmData = inject(MAT_DIALOG_DATA);
 }

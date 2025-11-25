@@ -7,6 +7,9 @@ class UploadedFile(models.Model):
 
     class Meta:
         ordering = ['-uploaded_at']
+        indexes = [
+            models.Index(fields=['-uploaded_at']),
+        ]
 
 
 class Person(models.Model):
@@ -16,7 +19,6 @@ class Person(models.Model):
         ('child', 'Child'),
     ]
 
-    # ✅ CHANGE: Many-to-Many relationship (person can have multiple files)
     uploaded_files = models.ManyToManyField(
         UploadedFile,
         related_name='persons',
@@ -30,6 +32,7 @@ class Person(models.Model):
     class Meta:
         indexes = [
             models.Index(fields=['role']),
+            models.Index(fields=['name']),
         ]
 
     def get_latest_upload_date(self):

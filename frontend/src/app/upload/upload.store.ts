@@ -1,16 +1,16 @@
-import { computed } from '@angular/core';
-import { pipe, switchMap, tap, from, of, concatMap, finalize } from 'rxjs';
-import { inject } from '@angular/core';
-import { UploadService } from './upload.service';
-import { patchState, signalStore, withComputed, withMethods, withState } from '@ngrx/signals';
-import { NotificationService } from '../shared/services/notification.service';
-import { DnaTableStore } from './dna-table/dna-table.store';
-import { rxMethod } from '@ngrx/signals/rxjs-interop';
-import { tapResponse } from '@ngrx/operators';
-import { FileWithStatus, initialState } from './models';
+import {computed} from '@angular/core';
+import {pipe, switchMap, tap, from, of, concatMap, finalize} from 'rxjs';
+import {inject} from '@angular/core';
+import {UploadService} from './upload.service';
+import {patchState, signalStore, withComputed, withMethods, withState} from '@ngrx/signals';
+import {NotificationService} from '../shared/services/notification.service';
+import {DnaTableStore} from './dna-table/dna-table.store';
+import {rxMethod} from '@ngrx/signals/rxjs-interop';
+import {tapResponse} from '@ngrx/operators';
+import {FileWithStatus, initialState} from './models';
 
 export const UploadStore = signalStore(
-  { providedIn: 'root' },
+  {providedIn: 'root'},
 
   withState(initialState),
 
@@ -23,11 +23,11 @@ export const UploadStore = signalStore(
   withMethods((store) => {
     const uploadService = inject(UploadService);
     const notificationService = inject(NotificationService);
-    const tableStore = inject(DnaTableStore);  // ⭐ Changed from tableService
+    const tableStore = inject(DnaTableStore);
 
     return {
-      setRole(role: 'father' | 'mother' | 'child' | 'save') {
-        patchState(store, { selectedRole: role });
+      setRole(role: 'parent' | 'child' | 'save') {
+        patchState(store, {selectedRole: role});
       },
 
       addFiles(newFiles: File[]) {
@@ -53,11 +53,11 @@ export const UploadStore = signalStore(
             notificationService.error(`${file.name} is too large (max 10MB)`);
             continue;
           }
-          validFiles.push({ file, status: 'idle' });
+          validFiles.push({file, status: 'idle'});
         }
 
         if (validFiles.length > 0) {
-          patchState(store, { files: [...store.files(), ...validFiles] });
+          patchState(store, {files: [...store.files(), ...validFiles]});
           notificationService.info(`${validFiles.length} file(s) selected`);
         }
       },
@@ -65,12 +65,12 @@ export const UploadStore = signalStore(
       removeFile(index: number) {
         const files = [...store.files()];
         files.splice(index, 1);
-        patchState(store, { files });
+        patchState(store, {files});
       },
 
       clearAll() {
         const count = store.files().length;
-        patchState(store, { files: [] });
+        patchState(store, {files: []});
         notificationService.info(`Cleared ${count} file(s)`);
       },
 
@@ -85,12 +85,12 @@ export const UploadStore = signalStore(
               return;
             }
 
-            patchState(store, { isUploading: true });
+            patchState(store, {isUploading: true});
           }),
           switchMap(() => {
             const filesToUpload = store.files()
-              .map((f, index) => ({ file: f, index }))
-              .filter(({ file }) => file.status === 'idle');
+              .map((f, index) => ({file: f, index}))
+              .filter(({file}) => file.status === 'idle');
 
             if (filesToUpload.length === 0) {
               return of(null);
@@ -100,12 +100,12 @@ export const UploadStore = signalStore(
 
             // ⭐ Process files sequentially with concatMap
             return from(filesToUpload).pipe(
-              concatMap(({ file, index }) => {
+              concatMap(({file, index}) => {
                 // Update to uploading
                 patchState(store, (state) => {
                   const files = [...state.files];
-                  files[index] = { ...files[index], status: 'uploading' };
-                  return { files };
+                  files[index] = {...files[index], status: 'uploading'};
+                  return {files};
                 });
 
                 const upload$ = role === 'save'
@@ -122,13 +122,13 @@ export const UploadStore = signalStore(
                           status: 'success',
                           response
                         };
-                        return { files };
+                        return {files};
                       });
 
                       // Show notifications
                       if (role === 'save') {
                         notificationService.success(`${file.file.name} saved to database`);
-                        tableStore.refreshData();
+                        tableStore.setDnaRecordsLoading();
                       } else {
                         if (response.top_matches?.length) {
                           notificationService.success(`${file.file.name}: Found ${response.top_matches.length} matches`);
@@ -150,7 +150,7 @@ export const UploadStore = signalStore(
                           status: 'error',
                           response: errorResponse
                         };
-                        return { files };
+                        return {files};
                       });
 
                       const errorMsg = errorResponse.errors?.[0] || 'Network error';
@@ -159,25 +159,12 @@ export const UploadStore = signalStore(
                   })
                 );
               }),
-              finalize(() => patchState(store, { isUploading: false }))
+              finalize(() => patchState(store, {isUploading: false}))
             );
           })
         )
       ),
 
-      // ⭐ Navigate to matched person (fully reactive)
-      navigateToMatch: rxMethod<{ person_id: number; name: string; role: string }>(
-        pipe(
-          tap((match) => {
-            const tableElement = document.querySelector('app-dna-table');
-            if (tableElement) {
-              tableElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-
-            tableStore.searchMatches({ personId: match.person_id, personRole: match.role });
-          })
-        )
-      )
     };
   })
 );

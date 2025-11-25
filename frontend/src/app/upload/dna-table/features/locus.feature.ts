@@ -1,0 +1,84 @@
+import {signalStoreFeature, withState, withMethods, patchState} from '@ngrx/signals';
+
+const ALL_LOCI = [
+  'D1S1656', 'D2S441', 'D2S1338', 'D3S1358', 'D5S818',
+  'D6S1043', 'D7S820', 'D8S1179', 'D10S1248', 'D12S391',
+  'D13S317', 'D16S539', 'D18S51', 'D19S433', 'D21S11',
+  'D22S1045', 'CSF1PO', 'FGA', 'TH01', 'TPOX', 'vWA',
+  'Penta D', 'Penta E',
+] as const;
+
+interface LocusState {
+  deletedLociByPerson: Map<number, number[]>;  // personId -> locusIds[]
+  addingLocusForPerson: number | null;          // Which person is adding a locus
+}
+
+export function withLocusFeature() {
+  return signalStoreFeature(
+    // State
+    withState<LocusState>({
+      deletedLociByPerson: new Map(),
+      addingLocusForPerson: null
+    }),
+
+    // Methods
+    withMethods((store) => ({
+      // Start adding locus UI
+      startAddingLocus: (personId: number) => {
+        patchState(store, {
+          addingLocusForPerson: personId
+        });
+      },
+
+      // Cancel adding locus
+      cancelAddingLocus: () => {
+        patchState(store, {
+          addingLocusForPerson: null
+        });
+      },
+
+      // Track deleted locus (for backend sync)
+      trackDeletedLocus: (personId: number, locusId: number) => {
+        const deletedMap = new Map(store.deletedLociByPerson());
+        const existing = deletedMap.get(personId) || [];
+
+        if (!existing.includes(locusId)) {
+          deletedMap.set(personId, [...existing, locusId]);
+          patchState(store, {
+            deletedLociByPerson: deletedMap
+          });
+        }
+      },
+
+      // Get deleted loci for person
+      getDeletedLoci: (personId: number): number[] => {
+        return store.deletedLociByPerson().get(personId) || [];
+      },
+
+      // Clear deleted loci after successful update
+      clearDeletedLoci: (personId: number) => {
+        const deletedMap = new Map(store.deletedLociByPerson());
+        deletedMap.delete(personId);
+        patchState(store, {
+          deletedLociByPerson: deletedMap
+        });
+      },
+
+      // Get available loci for person
+      getAvailableLoci: (usedLociNames: string[]): string[] => {
+        return ALL_LOCI.filter(name => !usedLociNames.includes(name));
+      },
+
+      // Check if person is adding locus
+      isAddingLocus: (personId: number): boolean => {
+        return store.addingLocusForPerson() === personId;
+      },
+
+      // Check if person has deleted loci
+      hasDeletedLoci: (personId: number): boolean => {
+        const deleted = store.deletedLociByPerson().get(personId);
+        return deleted !== undefined && deleted.length > 0;
+      }
+    })),
+  );
+}

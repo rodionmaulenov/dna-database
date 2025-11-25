@@ -22,7 +22,7 @@ class PersonData(BaseModel):
     name: str
     loci_count: int
     loci: List[LocusData]
-    files: Optional[List[FileInfo]] = None  # ✅ NEW: All files for this person
+    files: Optional[List[FileInfo]] = None
 
 
 class MatchResult(BaseModel):
@@ -45,10 +45,9 @@ class FileUploadResponse(BaseModel):
 
 class DNADataResponse(BaseModel):
     id: int
-    overall_confidence: float = 1.0
     parent: Optional[PersonData] = None
-    child: Optional[PersonData] = None  # Single child (backward compatibility)
-    children: Optional[List[PersonData]] = None  # Multiple children
+    child: Optional[PersonData] = None
+    children: Optional[List[PersonData]] = None
 
     class Config:
         from_attributes = True
@@ -56,22 +55,42 @@ class DNADataResponse(BaseModel):
 
 class DNADataListResponse(BaseModel):
     data: List[DNADataResponse]
-    total: int = 0  # Total number of records
-    page: int = 1  # Current page
-    page_size: int = 20  # Items per page
+    total: int = 0
+    page: int = 1
+    page_size: int = 20
+
+
+class UpdateLocusData(BaseModel):
+    id: int
+    locus_name: str
+    allele_1: str
+    allele_2: str
+
+
+class CreateLocusData(BaseModel):
+    locus_name: str
+    allele_1: str
+    allele_2: str
 
 
 class UpdatePersonRequest(BaseModel):
     name: Optional[str] = None
     role: Optional[str] = None
+    loci: Optional[List[UpdateLocusData]] = None
+    new_loci: Optional[List[CreateLocusData]] = None
+    deleted_loci_ids: Optional[List[int]] = None
 
 
-class UpdateLocusRequest(BaseModel):
-    allele_1: str
-    allele_2: str
+class UpdatePersonData(BaseModel):
+    id: int
+    name: str
+    role: str
+    loci_count: int
+    loci: List[LocusData]
 
 
-class CreateLocusRequest(BaseModel):
-    locus_name: str
-    allele_1: str
-    allele_2: str
+class UpdatePersonResponse(BaseModel):
+    success: bool
+    message: str
+    data: Optional[UpdatePersonData] = None
+    errors: Optional[List[str]] = None

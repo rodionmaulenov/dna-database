@@ -1,3 +1,157 @@
+//::ng-deep .upload-top-sheet {
+//  .mat-bottom-sheet-container {
+//    position: fixed;
+//    top: 0;
+//    bottom: auto;
+//    left: 0;
+//    right: 0;
+//    margin-left: auto;
+//    margin-right: auto;
+//    border-radius: 0 0 16px 16px;
+//    max-width: 400px;
+//    max-height: 570px;
+//  }
+//}
+//
+//.upload-sheet-container {
+//  padding: 24px;
+//  min-height: 300px;
+//  max-height: 80vh;
+//  display: flex;
+//  flex-direction: column;
+//}
+//
+//.upload-controls {
+//  display: flex;
+//  gap: 12px;
+//  margin-bottom: 24px;
+//  flex-wrap: wrap;
+//  flex-shrink: 0;  // ⭐ Don't shrink controls
+//}
+//
+//.files-list {
+//  margin-top: 16px;
+//  flex: 1;  // ⭐ Take remaining space
+//  min-height: 0;  // ⭐ Allow shrinking
+//}
+//
+//.empty-state {
+//  display: flex;
+//  flex-direction: column;
+//  align-items: center;
+//  justify-content: center;
+//  padding: 40px 20px;
+//  color: #999;
+//
+//  mat-icon {
+//    font-size: 48px;
+//    width: 48px;
+//    height: 48px;
+//    margin-bottom: 16px;
+//  }
+//
+//  p {
+//    margin: 0;
+//    font-size: 14px;
+//  }
+//}
+//
+//[matListItemMeta] {
+//  mat-spinner {
+//    margin-top: -27px;
+//  }
+//  mat-icon {
+//    font-size: 27px;
+//    width: 27px;
+//    height: 27px;
+//  }
+//}
+//
+//.mat-mdc-nav-list .mat-mdc-list-item {
+//  cursor: auto;
+//}
+//
+//.mdc-list-item--with-leading-radio.mdc-list-item--with-two-lines.mdc-list-item--with-trailing-meta .mdc-list-item__end,
+//.mdc-list-item--with-leading-checkbox.mdc-list-item--with-two-lines.mdc-list-item--with-trailing-meta .mdc-list-item__end,
+//.mdc-list-item--with-leading-icon.mdc-list-item--with-two-lines.mdc-list-item--with-trailing-meta .mdc-list-item__end,
+//.mdc-list-item--with-leading-avatar.mdc-list-item--with-two-lines.mdc-list-item--with-trailing-meta .mdc-list-item__end {
+//  margin-top: 8px;
+//}
+//
+//.select-option {
+//  font-size: 14px;
+//}
+//
+//.select-option-icon {
+//  font-size: 20px;
+//  width: 20px;
+//  height: 20px;
+//  margin-right: 8px;
+//  vertical-align: middle;
+//}
+//
+//.loading-dots::after {
+//  content: '';
+//  animation: dots 1.5s infinite;
+//}
+//
+//@keyframes dots {
+//  0% { content: ''; }
+//  25% { content: '.'; }
+//  50% { content: '..'; }
+//  75% { content: '...'; }
+//}
+//
+//.person-link-upload {
+//  cursor: pointer;
+//  color: #004f4f;
+//  text-decoration: none;
+//  transition: all 0.2s ease;
+//}
+//
+//.person-link-upload:hover {
+//  text-decoration: underline;
+//}
+//
+//.error-message-container {
+//  padding: 8px 16px 12px 35px; // Align with text (56px = icon width)
+//  color: darkred;
+//  font-size: 13px;
+//  line-height: 1.5;
+//  word-wrap: break-word;
+//  white-space: normal;
+//  background: #ffebee;
+//  border-left: 3px solid #d32f2f;
+//  margin: -8px 16px 8px 16px;
+//  border-radius: 4px;
+//}
+//
+//.person-error-link {
+//  color: #1976d2;
+//  text-decoration: underline;
+//  margin: 0 2px;
+//  cursor: pointer;
+//  font-weight: 600;
+//
+//  &:hover {
+//    color: #1565c0;
+//    text-decoration: none;
+//  }
+//}
+//
+//
+//.upload-progress-bar {
+//  margin-top: 8px;
+//  height: 4px;
+//}
+//
+//.progress-text {
+//  display: block;
+//  font-size: 12px;
+//  color: #666;
+//  margin-top: 4px;
+//}
+
 ::ng-deep .upload-top-sheet {
   .mat-bottom-sheet-container {
     position: fixed;

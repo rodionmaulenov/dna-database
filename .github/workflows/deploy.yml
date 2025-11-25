@@ -57,6 +57,11 @@ jobs:
           # AI API
           ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
           
+          # Textract user
+          AWS_TEXTRACT_ACCESS_KEY_ID=${{ secrets.AWS_TEXTRACT_ACCESS_KEY_ID }}
+          AWS_TEXTRACT_SECRET_ACCESS_KEY=${{ secrets.AWS_TEXTRACT_SECRET_ACCESS_KEY }}
+          AWS_TEXTRACT_REGION_NAME=${{ secrets.AWS_TEXTRACT_REGION_NAME }}
+          
           # AWS S3
           AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}

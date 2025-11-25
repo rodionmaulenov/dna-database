@@ -1,0 +1,610 @@
+"""
+DNA Extraction Service
+======================
+Extracts DNA data from PDF files using AWS Textract + Claude AI validation.
+
+Main functions:
+- extract_from_pdf(): Extract DNA data from PDF file
+- extract_and_save(): Extract and save to database (full pipeline)
+"""
+import logging
+import json
+import os
+
+import anthropic
+
+from dna.services.textract_service import TextractService
+from dna.pdf_processor import process_dna_report_pdf
+
+logger = logging.getLogger(__name__)
+
+
+# ============================================================
+# HELPER FUNCTIONS
+# ============================================================
+
+def normalize_alleles(value: str) -> list[str]:
+    """Split '15.15' or '15,16' into ['15', '15'] or ['15', '16']"""
+    value = value.strip()
+    if not value or value == '-':
+        return []
+
+    if ',' in value:
+        return [a.strip() for a in value.split(',') if a.strip()]
+
+    if '.' in value:
+        parts = value.split('.')
+        if len(parts) == 2 and len(parts[1]) > 1:
+            return [parts[0], parts[1]]
+        else:
+            return [value]
+
+    return [value]
+
+
+def normalize_role(role_text: str) -> str:
+    """Normalize role to standard value"""
+    role_lower = role_text.lower().strip()
+
+    # English
+    if 'father' in role_lower:
+        return 'father'
+    elif 'mother' in role_lower:
+        return 'mother'
+    elif 'child' in role_lower:
+        return 'child'
+
+    # Ukrainian
+    elif 'батько' in role_lower or 'вірогідний' in role_lower:
+        return 'father'
+    elif 'мати' in role_lower or 'матi' in role_lower:
+        return 'mother'
+    elif 'дитина' in role_lower:
+        return 'child'
+
+    return role_lower
+
+
+def detect_role_from_amelogenin(alleles: list[str]) -> str:
+    """Detect if person is male or female from Amelogenin"""
+    if not alleles:
+        return 'unknown'
+
+    value = ''.join(alleles).upper().replace(' ', '').replace(',', '')
+
+    if 'XY' in value or value == 'XY':
+        return 'father'
+    elif 'XX' in value or value == 'XX':
+        return 'mother'
+
+    return 'unknown'
+
+
+def is_empty_column(table: list[list[str]], col: int, data_start_row: int) -> bool:
+    """Check if entire column has no data (all empty or '-')"""
+    for row in table[data_start_row:]:
+        if col < len(row):
+            value = row[col].strip()
+            if value and value != '-':
+                return False
+    return True
+
+
+def find_header_and_role_rows(table: list[list[str]]) -> tuple[int, int, int]:
+    """
+    Find which rows contain headers, roles, and where data starts.
+    Returns: (header_row, role_row, data_start_row)
+    """
+    role_keywords = ['father', 'mother', 'child', 'батько', 'мати', 'дитина', 'alleged', 'вірогідний']
+
+    if not table or len(table) < 2:
+        return (0, -1, 1)
+
+    row0_first = table[0][0].lower().strip() if table[0] else ''
+    locus_keywords = ['locus', 'локус', 'marker', 'маркер', 'фрагменти', 'фрагменти днк']
+    row0_is_locus = any(kw in row0_first for kw in locus_keywords)
+
+    def has_roles(row):
+        if not row:
+            return False
+        for cell in row[1:]:
+            if cell and any(kw in cell.lower() for kw in role_keywords):
+                return True
+        return False
+
+    row0_has_roles = has_roles(table[0])
+    row1_has_roles = has_roles(table[1]) if len(table) > 1 else False
+
+    if not row0_is_locus and row1_has_roles:
+        return (-1, 1, 2)
+
+    if row0_is_locus and row0_has_roles and not row1_has_roles:
+        return (0, 0, 1)
+
+    if row0_is_locus and row1_has_roles:
+        return (0, 1, 2)
+
+    if row0_is_locus and not row1_has_roles:
+        return (0, -1, 1)
+
+    return (0, -1, 1)
+
+
+def detect_laboratory(all_tables: list) -> str:
+    """Detect which lab produced the report"""
+    text = str(all_tables).lower()
+
+    if 'євролаб' in text or 'eurolab' in text:
+        return 'eurolab'
+    elif 'mother and child' in text:
+        return 'mother_and_child'
+    elif 'biotexcom' in text:
+        return 'biotexcom'
+    else:
+        return 'unknown'
+
+
+# ============================================================
+# TEXTRACT PARSING
+# ============================================================
+
+def extract_all_tables_from_textract(blocks: list[dict]) -> list[list[list[str]]]:
+    """Extract ALL tables from Textract blocks"""
+    id_map = {block['Id']: block for block in blocks}
+
+    table_blocks = [b for b in blocks if b['BlockType'] == 'TABLE']
+
+    if not table_blocks:
+        return []
+
+    all_tables = []
+
+    for table_block in table_blocks:
+        child_ids = []
+        if 'Relationships' in table_block:
+            for rel in table_block['Relationships']:
+                if rel['Type'] == 'CHILD':
+                    child_ids = rel['Ids']
+                    break
+
+        if not child_ids:
+            continue
+
+        max_row = 0
+        max_col = 0
+        cells_data = []
+
+        for child_id in child_ids:
+            block = id_map.get(child_id)
+            if not block:
+                continue
+
+            row = block.get('RowIndex', 0)
+            col = block.get('ColumnIndex', 0)
+            max_row = max(max_row, row)
+            max_col = max(max_col, col)
+
+            cell_text = ''
+            if 'Relationships' in block:
+                for rel in block['Relationships']:
+                    if rel['Type'] == 'CHILD':
+                        words = []
+                        for word_id in rel['Ids']:
+                            word_block = id_map.get(word_id)
+                            if word_block and word_block['BlockType'] == 'WORD':
+                                words.append(word_block.get('Text', ''))
+                        cell_text = ' '.join(words)
+
+            cells_data.append({'row': row, 'col': col, 'text': cell_text})
+
+        if max_row > 0 and max_col > 0:
+            table = [['' for _ in range(max_col)] for _ in range(max_row)]
+            for cell in cells_data:
+                table[cell['row'] - 1][cell['col'] - 1] = cell['text']
+            all_tables.append(table)
+
+    return all_tables
+
+
+def parse_dna_table(table: list[list[str]], data_start_row: int, role_row: int, header_row: int) -> list[dict]:
+    """Parse DNA table and extract persons with alleles"""
+    max_col = len(table[0]) if table else 0
+    persons = []
+
+    for col in range(1, max_col):
+        role_text = table[role_row][col] if role_row >= 0 and len(table) > role_row else ''
+
+        if header_row >= 0 and header_row != role_row:
+            name = table[header_row][col] if len(table) > header_row else ''
+        else:
+            name = ''
+
+        if is_empty_column(table, col, data_start_row):
+            continue
+
+        skip_keywords = ['index', 'relation', 'status', 'match', 'getting', 'alleles']
+        combined_text = f"{name} {role_text}".lower()
+        if any(kw in combined_text for kw in skip_keywords) and not any(
+                r in combined_text for r in ['father', 'mother', 'child']):
+            continue
+
+        role = normalize_role(role_text)
+
+        if name:
+            name_lower = name.lower()
+            if any(kw in name_lower for kw in ['father', 'mother', 'child', 'alleged', 'status', 'getting']):
+                name = ''
+
+        persons.append({
+            'col': col,
+            'name': name,
+            'role': role,
+            'alleles': {}
+        })
+
+    # Extract alleles
+    for row in table[data_start_row:]:
+        locus = row[0] if row else ''
+        if not locus:
+            continue
+
+        for person in persons:
+            col = person['col']
+            if col < len(row):
+                person['alleles'][locus] = normalize_alleles(row[col])
+
+    # Detect role from Amelogenin if missing
+    for person in persons:
+        if not person['role'] or person['role'] == '' or person['role'] == 'unknown':
+            amelogenin = person['alleles'].get('Amelogenin', [])
+            person['role'] = detect_role_from_amelogenin(amelogenin)
+
+    return persons
+
+
+# ============================================================
+# CLAUDE VALIDATION
+# ============================================================
+
+def validate_with_claude(persons: list[dict], raw_table: list[list[str]], all_tables: list = None) -> dict:
+    """Send extracted DNA data to Claude for validation and fixing OCR errors."""
+    client = anthropic.Anthropic()
+
+    prompt = f"""You are a DNA data validator. Fix OCR errors and fill missing data.
+                
+DNA LOCUS TABLE (main table):
+{json.dumps(raw_table, indent=2, ensure_ascii=False)}
+
+ALL TABLES FROM DOCUMENT (includes Examination Record with names):
+{json.dumps(all_tables, indent=2, ensure_ascii=False)}
+
+EXTRACTED DATA:
+{json.dumps(persons, indent=2, ensure_ascii=False)}
+
+---
+
+🔧 FIX THESE ISSUES:
+
+1. **MISSING NAMES** - If name is empty:
+   - Look in ALL TABLES for "Examination Record" section
+   - Find table with columns like "Name", "Claimed relationship", "DNA source"
+   - Match role (Alleged Father, Child, Mother) with name from that table
+
+2. **MERGED LOCI** - Split into separate entries:
+   - "D8S1179 D21S11" with values "12, 13 29, 33.2" 
+   - → D8S1179: ["12", "13"] AND D21S11: ["29", "33.2"]
+
+3. **LOCUS NAME TYPOS** - Auto-correct:
+   - D5S8l8, D5S8I8, D5S81B → D5S818
+   - D138317, D13S3l7 → D13S317
+   - CSF1P0 (zero) → CSF1PO (letter O)
+   - D2IS11 → D21S11
+   - VWA → vWA
+   - TH01 or THO1 → TH01
+
+4. **ALLELE FORMAT** - Fix OCR errors:
+   - "8.8" → ["8", "8"] (two same alleles)
+   - "15.16" → ["15", "16"] (OCR read comma as dot)
+   - "9.3" → ["9.3"] (keep - real microvariant)
+   - "33.2" → ["33.2"] (keep - real microvariant)
+
+5. **ROLE DETECTION** - If role is empty, use Amelogenin:
+   - XY → "father" (male)
+   - XX → "mother" (female)
+
+6. **EMPTY VALUES** - Keep as empty array: []
+
+7. **SKIP EMPTY PERSONS** - If person has no allele data, remove them
+
+---
+
+📋 VALID LOCUS NAMES:
+D1S1656, D2S441, D2S1338, D3S1358, D5S818, D6S1043, D7S820, D8S1179,
+D10S1248, D12S391, D13S317, D16S539, D18S51, D19S433, D21S11, D22S1045,
+CSF1PO, FGA, TH01, TPOX, vWA, Penta D, Penta E, Amelogenin, Y indel
+
+---
+
+Return ONLY valid JSON (no markdown, no explanation):
+{{
+  "persons": [
+    {{
+      "name": "Person Name",
+      "role": "father|mother|child",
+      "alleles": {{
+        "D3S1358": ["15", "16"],
+        "Amelogenin": ["X", "Y"]
+      }}
+    }}
+  ],
+  "fixes_applied": ["fix 1", "fix 2"]
+}}"""
+
+    response = client.messages.create(
+        model="claude-3-5-haiku-20241022",
+        max_tokens=4096,
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    result_text = response.content[0].text
+
+    if '```' in result_text:
+        result_text = result_text.split('```')[1]
+        if result_text.startswith('json'):
+            result_text = result_text[4:]
+    result_text = result_text.strip()
+
+    result = json.loads(result_text)
+
+    # Calculate Claude cost
+    input_tokens = response.usage.input_tokens
+    output_tokens = response.usage.output_tokens
+    # Haiku pricing: $0.25/1M input, $1.25/1M output
+    claude_cost = (input_tokens * 0.25 / 1_000_000) + (output_tokens * 1.25 / 1_000_000)
+
+    result['claude_cost'] = round(claude_cost, 6)
+    result['claude_tokens'] = {'input': input_tokens, 'output': output_tokens}
+
+    return result
+
+
+# ============================================================
+# MAIN EXTRACTION FUNCTION
+# ============================================================
+
+def extract_from_pdf(pdf_path: str) -> dict:
+    """
+    Main extraction function.
+
+    Args:
+        pdf_path: Path to PDF file
+
+    Returns:
+        {
+            'success': True/False,
+            'persons': [...],
+            'laboratory': 'eurolab',
+            'loci_count': 16,
+            'fixes_applied': [...]
+        }
+    """
+    logger.info(f"📄 Starting extraction from: {pdf_path}")
+
+    # Step 1: Convert PDF to image
+    images = process_dna_report_pdf(
+        pdf_path,
+        enhance=False,
+        detect_tables=True,
+        best_page_only=True
+    )
+
+    if not images:
+        logger.error("No DNA table found in PDF")
+        return {'success': False, 'error': 'No DNA table found in PDF'}
+
+    # Step 2: Extract with Textract
+    logger.info("🔍 Extracting with Textract...")
+    textract = TextractService()
+    raw_response = textract.extract_raw(images[0])
+    blocks = raw_response.get('Blocks', [])
+
+    # Step 3: Parse all tables
+    all_tables = extract_all_tables_from_textract(blocks)
+
+    if not all_tables:
+        logger.error("No tables found in document")
+        return {'success': False, 'error': 'No tables found in document'}
+
+    # Find largest table (DNA locus table)
+    table = max(all_tables, key=lambda t: len(t) * len(t[0]) if t and t[0] else 0)
+
+    logger.info(f"📊 Found {len(all_tables)} tables, using largest: {len(table)} rows x {len(table[0])} cols")
+
+    # Detect laboratory
+    laboratory = detect_laboratory(all_tables)
+    logger.info(f"🏥 Detected laboratory: {laboratory}")
+
+    # Step 4: Find table structure
+    header_row, role_row, data_start_row = find_header_and_role_rows(table)
+    logger.info(f"Header row: {header_row}, Role row: {role_row}, Data starts: {data_start_row}")
+
+    # Step 5: Parse DNA table
+    persons = parse_dna_table(table, data_start_row, role_row, header_row)
+    logger.info(f"👥 Found {len(persons)} persons")
+
+    # Remove 'col' from persons for validation
+    persons_for_validation = [
+        {'name': p['name'], 'role': p['role'], 'alleles': p['alleles']}
+        for p in persons
+    ]
+
+    # Step 6: Validate with Claude
+    logger.info("🤖 Validating with Claude AI...")
+    claude_cost = 0.0
+    claude_tokens = {}
+    try:
+        validated = validate_with_claude(persons_for_validation, table, all_tables)
+
+        for fix in validated.get('fixes_applied', []):
+            logger.info(f"🔧 Fix: {fix}")
+
+        response_persons = validated['persons']
+        fixes_applied = validated.get('fixes_applied', [])
+        claude_cost = validated.get('claude_cost', 0.0)
+        claude_tokens = validated.get('claude_tokens', {})
+
+    except Exception as e:
+        logger.error(f"❌ Claude validation failed: {e}")
+        response_persons = persons_for_validation
+        fixes_applied = []
+
+    # Calculate total cost
+    textract_cost = 0.0015  # ~$0.0015 per page
+    total_cost = textract_cost + claude_cost
+
+    # Log results with cost
+    logger.info(f"✅ Extraction complete:")
+    for person in response_persons:
+        logger.info(f"  {person['name']} ({person['role']}): {len(person['alleles'])} loci")
+    logger.info(f"💰 Cost: Textract ~${textract_cost:.4f}, Claude ~${claude_cost:.4f}, Total ~${total_cost:.4f}")
+
+    return {
+        'success': True,
+        'persons': response_persons,
+        'laboratory': laboratory,
+        'loci_count': len(response_persons[0]['alleles']) if response_persons else 0,
+        'fixes_applied': fixes_applied,
+        'cost': {
+            'textract': textract_cost,
+            'claude': claude_cost,
+            'total': round(total_cost, 6),
+            'claude_tokens': claude_tokens,
+        }
+    }
+
+
+# ============================================================
+# FORMAT CONVERTER
+# ============================================================
+
+def convert_to_save_format(extraction_result: dict) -> dict:
+    """
+    Convert extract_from_pdf() output to save_dna_extraction_to_database() format.
+
+    Input format (from extract_from_pdf):
+        {
+            'persons': [
+                {'name': '...', 'role': 'father', 'alleles': {'D3S1358': ['15', '16'], ...}},
+                {'name': '...', 'role': 'child', 'alleles': {...}},
+            ]
+        }
+
+    Output format (for save_dna_extraction_to_database):
+        {
+            'parent': {'name': '...', 'loci': [{'locus_name': 'D3S1358', 'allele_1': '15', 'allele_2': '16'}]},
+            'parent_role': 'father',
+            'children': [{'name': '...', 'loci': [...]}],
+        }
+    """
+    persons = extraction_result.get('persons', [])
+
+    result = {
+        'parent': None,
+        'parent_role': 'unknown',
+        'children': [],
+    }
+
+    for person in persons:
+        name = person.get('name', 'Unknown')
+        role = person.get('role', 'unknown').lower()
+        alleles_dict = person.get('alleles', {})
+
+        # Convert alleles dict → loci list
+        loci = []
+        for locus_name, allele_values in alleles_dict.items():
+            locus_data = {
+                'locus_name': locus_name,
+                'allele_1': allele_values[0] if len(allele_values) > 0 else None,
+                'allele_2': allele_values[1] if len(allele_values) > 1 else (
+                    allele_values[0] if len(allele_values) == 1 else None
+                ),
+            }
+            loci.append(locus_data)
+
+        person_data = {'name': name, 'loci': loci}
+
+        if role in ('father', 'mother'):
+            result['parent'] = person_data
+            result['parent_role'] = role
+        elif role == 'child':
+            result['children'].append(person_data)
+
+    return result
+
+
+# ============================================================
+# FULL PIPELINE: EXTRACT AND SAVE
+# ============================================================
+
+def extract_and_save(file, filename: str = None) -> dict:
+    """
+    Full pipeline: Extract DNA from PDF and save to database.
+
+    This is the main function for production use.
+
+    Args:
+        file: Uploaded file object (Django/Ninja)
+        filename: Optional filename override
+
+    Returns:
+        {
+            'success': True/False,
+            'persons': [...],  # Extracted data
+            'laboratory': '...',
+            'loci_count': int,
+            'fixes_applied': [...],
+            'saved_to_db': True/False,
+            'uploaded_file_id': int (if saved),
+            'save_errors': [...],
+        }
+    """
+    from dna.utils.file_helpers import save_temp_file
+    from dna.services.dna_persistence_service import save_dna_extraction_to_database
+
+    # Step 1: Save to temp
+    temp_path = save_temp_file(file)
+    logger.info(f"📁 Temp file: {temp_path}")
+
+    if not filename:
+        filename = getattr(file, 'name', 'dna_report.pdf')
+
+    # Step 2: Extract from PDF
+    result = extract_from_pdf(temp_path)
+
+    # Step 3: If extraction failed, cleanup and return
+    if not result['success']:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        return result
+
+    # Step 4: Convert format for database
+    save_format = convert_to_save_format(result)
+
+    # Step 5: Save to database
+    save_result = save_dna_extraction_to_database(
+        extraction_result=save_format,
+        filename=filename,
+        local_file_path=temp_path  # persistence service handles cleanup
+    )
+
+    # Step 6: Merge results
+    result['saved_to_db'] = save_result.get('success', False)
+    result['uploaded_file_id'] = save_result.get('uploaded_file_id')
+    result['save_errors'] = save_result.get('errors', [])
+
+    # Log final cost
+    cost = result.get('cost', {})
+    if cost:
+        logger.info(f"💰 Total extraction cost: ${cost.get('total', 0):.4f}")
+
+    return result

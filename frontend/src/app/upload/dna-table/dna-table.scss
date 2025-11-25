@@ -47,45 +47,6 @@
   background: white;
 }
 
-//.table-scroll-container {
-//  position: relative;
-//  display: flex;
-//  flex-direction: column;
-//  height: 630px; // ✅ Fixed height required for virtual scrolling
-//  overflow: hidden;
-//  border: 1px solid #e0e0e0;
-//  border-radius: 16px 16px 0 0;
-//
-//  // ⭐ Tablet (landscape and portrait)
-//  @media (max-width: 1024px) {
-//    height: 70vh;
-//  }
-//
-//  // ⭐ Mobile (large phones)
-//  @media (max-width: 768px) {
-//    height: 60vh;
-//  }
-//
-//  // ⭐ Mobile (small phones)
-//  @media (max-width: 480px) {
-//    height: 50vh;
-//    min-height: 300px;
-//  }
-//}
-//
-//.loading-shade {
-//  position: absolute;
-//  top: 0;
-//  left: 0;
-//  bottom: 0;
-//  right: 0;
-//  z-index: 1;
-//  display: flex;
-//  align-items: center;
-//  justify-content: center;
-//  border-radius: 16px 16px 0 0;
-//}
-
 .table-scroll-container {
   position: relative;
   min-height: 300px;
@@ -114,7 +75,7 @@
   left: 16px;
   right: 16px;
   bottom: 72px;
-  background: rgba(0, 0, 0, 0.15);
+  //background: rgba(0, 0, 0, 0.15);
   z-index: 10;
   display: flex;
   align-items: center;
@@ -145,7 +106,7 @@ mat-paginator {
 }
 
 tr.element-row {
-  cursor: pointer;
+  cursor: auto;
   height: 57px !important;
 
   &:not(.expanded-row):hover {
@@ -233,6 +194,7 @@ td[matColumnDef="name"] {
 }
 
 .row-icon-size {
+  cursor: pointer;
   font-size: 20px;
   width: 20px;
   height: 20px;
@@ -332,14 +294,46 @@ td[matColumnDef="name"] {
   }
 }
 
-.file-link {
-  color: #1976d2;
-  text-decoration: none;
-  font-weight: 500;
+// ✅ Add only these:
+.file-chip-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.file-delete-btn {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #d32f2f;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+
+  mat-icon {
+    font-size: 12px;
+    width: 12px;
+    height: 12px;
+  }
 
   &:hover {
-    text-decoration: underline;
+    background: #b71c1c;
+  }
+
+  &:disabled {
+    background: #999;
+    cursor: wait;
   }
 }
 
-
+.file-chip-wrapper:hover .file-delete-btn {
+  opacity: 1;
+}

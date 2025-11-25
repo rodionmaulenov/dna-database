@@ -19,18 +19,6 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: dna-redis
-    restart: unless-stopped
-    networks:
-      - dna-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   backend:
     build:
       context: ./backend
@@ -56,22 +44,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-
-  celery:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: dna-celery
-    restart: unless-stopped
-    command: celery -A config worker -l info
-    env_file:
-      - .env
-    volumes:
-      - media_data:/app/media
-    networks:
-      - dna-network
-    depends_on:
-      - backend
 
   nginx:
     build:

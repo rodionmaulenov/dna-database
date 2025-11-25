@@ -1,10 +1,11 @@
 <div class="upload-container">
 
   <div class="active-button">
-    <!-- Toggle -->
+
+    <!-- ✅ Role Filter Toggle -->
     <mat-button-toggle-group
-      [value]="tableStore.roleFilter()"
-      (change)="setFilter($event.value)">
+      [value]="tableStore.localRoleFilter()"
+      (change)="setRoleFilter($event.value)">
       <mat-button-toggle value="parent">
         <div class="icon-alignment">
           <mat-icon>people</mat-icon>
@@ -19,50 +20,30 @@
       </mat-button-toggle>
     </mat-button-toggle-group>
 
+    <!-- ✅ Upload Button -->
     <div class="upload-trigger">
       <button mat-raised-button color="primary" (click)="openUploadSheet()">
         <mat-icon>open_in_new</mat-icon>
-        Popup
+        Upload & Match
       </button>
     </div>
 
-    <!-- ⭐ Active Filter Chip -->
-      <mat-chip-set>
-        @if (tableStore.isLocalFiltering()) {
-          <mat-chip (removed)="clearLocalFilter()">
-            <mat-icon matChipAvatar>filter_list</mat-icon>
-            Viewing: {{ tableStore.filteredPersonName() }}
-            <button matChipRemove>
-              <mat-icon>cancel</mat-icon>
-            </button>
-          </mat-chip>
-        }
-
-        <!-- ⭐ Backend Search Chip (from match results or table search) -->
-        @if (tableStore.isSearching()) {
-          <mat-chip highlighted (removed)="clearSearch()">
-            <mat-icon matChipAvatar>search</mat-icon>
-            Searching: {{ tableStore.filteredPersonName() }}
-            <button matChipRemove>
-              <mat-icon>cancel</mat-icon>
-            </button>
-          </mat-chip>
-        }
-
-        <!-- ⭐ Multiple Persons Filter Chip -->
-        @if (tableStore.isMultipleFiltering()) {
-          <mat-chip (removed)="clearMultipleFilter()">
-            <mat-icon matChipAvatar>group</mat-icon>
-            Viewing: {{ tableStore.multiplePersonFilter()?.length }} persons
-            <button matChipRemove>
-              <mat-icon>cancel</mat-icon>
-            </button>
-          </mat-chip>
-        }
-      </mat-chip-set>
+    <!-- ✅ Active Filter Chip -->
+    <mat-chip-set>
+      @if (tableStore.remotePersonIds()) {
+        <mat-chip (removed)="clearPersonFilter()">
+          <mat-icon matChipAvatar>filter_alt</mat-icon>
+          {{ tableStore.remotePersonNames() }}
+          <button matChipRemove>
+            <mat-icon>cancel</mat-icon>
+          </button>
+        </mat-chip>
+      }
+    </mat-chip-set>
 
   </div>
 
+  <!-- ✅ DNA Table -->
   <app-dna-table></app-dna-table>
 
 </div>

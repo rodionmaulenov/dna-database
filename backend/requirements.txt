@@ -20,10 +20,3 @@ gunicorn==23.0.0
 boto3==1.35.36
 django-storages[s3]==1.14.4
 django-cleanup==8.1.0
-# sudo apt update
-# sudo apt install tesseract-ocr
-
-# Install language packs for multilingual support
-# sudo apt install tesseract-ocr-eng  # English
-# sudo apt install tesseract-ocr-ukr  # Ukrainian
-# sudo apt install tesseract-ocr-rus  # Russia

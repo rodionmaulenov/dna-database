@@ -1,5 +1,28 @@
 import {LocusData, PersonData} from '../models';
 
+export interface TableRowData {
+  id: number;
+  personId: number;
+  name: string;
+  role: 'father' | 'mother' | 'child';
+  loci_count: number;
+  file: string;
+  files?: Array<{
+    id: number;
+    file: string;
+    uploaded_at: string;
+  }>;
+  loci: LocusData[];
+  relatedPersonId: number | null;
+  relatedPersonName: string | null;
+  relatedPersonRole: string | null;
+  relatedPersons: Array<{
+    id: number;
+    name: string;
+    role: string;
+  }> | null;
+}
+
 export interface DNADataResponse {
   id: number;
   parent: PersonData | null;
@@ -14,61 +37,21 @@ export interface DNADataListResponse {
   page_size: number;
 }
 
-export interface TableRowData {
-  id: number;
-  personId: number;
-  name: string;
-  role: string;
-  loci_count: number;
-  file: string;  // First file (backward compatibility)
-  files?: Array<{  // ✅ Already has this
-    id: number;
-    file: string;
-    uploaded_at: string;
-  }>;
-  loci: LocusData[];
-
-  relatedPersonId: number | null; // ID of child (if parent) or parent (if child)
-  relatedPersonName: string | null; // Name of child (if parent) or parent (if child)
-  relatedPersonRole: string | null;
-  relatedPersons: Array<{
-    id: number;
-    name: string;
-    role: string;
-  }> | null;
-}
-
-interface DnaTableState {
-  tableData: TableRowData[];
-  loading: boolean;
-  currentPage: number;
-  pageSize: number;
-  totalRecords: number;
-  currentPersonFilter: number | null;
-  localPersonFilter: number | null;
-  multiplePersonFilter: number[] | null;
-  roleFilter: 'parent' | 'child';
-  expandedRowId: number | null;
-  updatingRowId: number | null;
-}
-
-export const initialState: DnaTableState = {
-  tableData: [],
-  loading: false,
-  currentPage: 1,
-  pageSize: 20,
-  totalRecords: 0,
-  currentPersonFilter: null,
-  localPersonFilter: null,
-  multiplePersonFilter: null,
-  roleFilter: 'parent',
-  expandedRowId: null,
-  updatingRowId: null,
-};
-
 export interface UpdatePersonData {
   name?: string;
   role?: string;
+  loci?: Array<{
+    id: number;
+    locus_name: string;
+    allele_1: string;
+    allele_2: string;
+  }>;
+  deleted_loci_ids?: number[];
+}
+
+export interface UpdatePersonResponse {
+  success: boolean;
+  errors?: string[];
 }
 
 export interface CreateLocusData {
@@ -77,10 +60,5 @@ export interface CreateLocusData {
   allele_2: string;
 }
 
-export interface LociUpdate {
-  id: number | null;
-  locus_name?: string;
-  allele_1: string;
-  allele_2: string;
-}
+
 

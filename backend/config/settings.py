@@ -17,6 +17,15 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+ENV = os.getenv('DJANGO_ENV', 'local')  # local | docker | production
+
+if ENV == 'local':
+    load_dotenv('.env.local')
+elif ENV == 'docker':
+    load_dotenv('.env.docker')
+else:
+    load_dotenv('.env.production')
+
 # Anthropic API Key
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
 
@@ -34,6 +43,8 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+
+BACKEND_URL = os.getenv('BACKEND_URL')
 
 CORS_ALLOWED_ORIGINS = os.getenv(
     'CORS_ALLOWED_ORIGINS',
@@ -163,10 +174,10 @@ if USE_S3:
                 "secret_key": AWS_SECRET_ACCESS_KEY,
                 "bucket_name": AWS_STORAGE_BUCKET_NAME,
                 "region_name": AWS_S3_REGION_NAME,
-                "querystring_auth": True,  # Generate signed URLs
-                "querystring_expire": 3600,  # 1 hour expiry
-                "signature_version": "s3v4",  # Modern AWS signature
-                "file_overwrite": False,  # Keep file versions
+                "querystring_auth": AWS_QUERYSTRING_AUTH,
+                "querystring_expire": AWS_QUERYSTRING_EXPIRE,
+                "signature_version": AWS_S3_SIGNATURE_VERSION,
+                "file_overwrite": AWS_S3_FILE_OVERWRITE,
             },
         },
         "staticfiles": {
@@ -197,21 +208,6 @@ else:
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-
-# ==========================================
-# Celery Configuration
-# ==========================================
-
-CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
-
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-
-CELERY_TIMEZONE = 'UTC'
-
-
 # ==========================================
 # Logging Configuration
 # ==========================================
@@ -241,3 +237,8 @@ LOGGING = {
         },
     },
 }
+
+# Textract credentials
+AWS_TEXTRACT_ACCESS_KEY_ID = os.getenv('AWS_TEXTRACT_ACCESS_KEY_ID')
+AWS_TEXTRACT_SECRET_ACCESS_KEY = os.getenv('AWS_TEXTRACT_SECRET_ACCESS_KEY')
+AWS_TEXTRACT_REGION_NAME = os.getenv('AWS_TEXTRACT_REGION_NAME')
