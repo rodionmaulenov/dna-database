@@ -2,7 +2,9 @@ import logging
 
 from ninja import Router
 
-from dna.models import Person, UploadedFile
+from django.db.models import Max
+
+from dna.models import Person
 from dna.schemas import DNADataListResponse
 from dna.utils.response_builders import build_person_response, build_parent_with_children_response
 
@@ -17,13 +19,15 @@ def get_all_dna_data(request, page: int = 1, page_size: int = 20):
 
     logger.info(f"📋 Loading all uploads - page {page}, size {page_size}")
 
-    # Get all parents with prefetch
+    # Get all parents ordered by most recent upload
     parents = Person.objects.filter(
         role__in=['father', 'mother']
+    ).annotate(
+        latest_upload=Max('uploaded_files__uploaded_at')  # ✅ Get latest upload time
     ).prefetch_related(
         'loci',
-        'uploaded_files__persons',  # ✅ Prefetch children through files
-    ).order_by('-id')
+        'uploaded_files__persons',
+    ).order_by('-latest_upload')  # ✅ Order by newest first
 
     total_count = parents.count()
 
@@ -34,7 +38,7 @@ def get_all_dna_data(request, page: int = 1, page_size: int = 20):
 
     result = []
     for parent in parents_page:
-        response = build_parent_with_children_response(parent)  # ✅ Use new function
+        response = build_parent_with_children_response(parent)
         if response:
             result.append(response)
 
