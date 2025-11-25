@@ -10,7 +10,6 @@ export function withLocalFilterFeature(
   collapseExpandable: () => void,
   isLoading: Signal<boolean>,
   reload: () => void,
-  resetForm: () => void
 ) {
   return signalStoreFeature(
     withState({
@@ -30,7 +29,6 @@ export function withLocalFilterFeature(
         setLoading(true);
         setRemotePersonIds(personId.toString());
         setRemotePersonNames(personName);
-        // resetForm();
 
         const newRoleFilter = personRole === 'child' ? 'child' : 'parent';
 
@@ -59,7 +57,6 @@ export function withLocalFilterFeature(
         } else {
           patchState(store, {localRoleFilter: 'parent'});
         }
-        // resetForm();
         reload();
       },
 
@@ -68,7 +65,6 @@ export function withLocalFilterFeature(
         setRemotePersonIds(null);
         setRemotePersonNames(null);
         patchState(store, {localRoleFilter: 'parent'});
-        // resetForm();
         reload();
       }
     })),

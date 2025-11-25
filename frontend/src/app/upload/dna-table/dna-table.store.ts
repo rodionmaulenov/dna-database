@@ -61,7 +61,6 @@ export const DnaTableStore = signalStore(
       store.collapseAll,
       store.isLoading,
       store.reload,
-      store.resetForm,
     )
   ),
 );

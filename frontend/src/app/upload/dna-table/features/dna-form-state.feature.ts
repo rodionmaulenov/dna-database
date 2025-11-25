@@ -125,12 +125,6 @@ export function withDnaFormState() {
           return person.loci.map(l => l.locus_name).filter(Boolean);
         },
 
-        resetForm: (): void => {
-          const form = personsArrayForm!();
-          form.reset();
-          form.value.set({persons: []});
-        },
-
       };
     })
   );

@@ -43,20 +43,21 @@
             </div>
           </th>
           <td mat-cell *matCellDef="let element" class="form-field-wrapper">
-            @if (!isLoading()) {
-              <!-- ✅ GET PERSONS ARRAY -->
+            <!-- ✅ Add safety check -->
+            @if (store.personsArrayForm() && $any(store.personsArrayForm())['persons']) {
               @let personsArray = $any(store.personsArrayForm())['persons'];
 
-              <!-- ✅ FIND PERSON BY ID -->
               @for (personField of personsArray; track $any(personField)['id']().value()) {
                 @if ($any(personField)['id']().value() === element.personId) {
-                  <!-- ✅ NOW ACCESS NAME FIELD -->
                   @let nameField = $any(personField)['name'];
 
                   <mat-form-field appearance="fill"
                                   class="name-input"
                                   subscriptSizing="dynamic">
-                    <input matInput [field]="nameField" [errorStateMatcher]="immediateErrorMatcher">
+                    <input matInput
+                           [field]="nameField"
+                           [disabled]="isLoading()"
+                           [errorStateMatcher]="immediateErrorMatcher">
                     <mat-error>
                       @if (nameField().errors().length > 0) {
                         @for (error of nameField().errors(); track error.kind) {
@@ -67,6 +68,9 @@
                   </mat-form-field>
                 }
               }
+            } @else {
+              <!-- ✅ Show placeholder when form doesn't exist -->
+              <span>{{ element.name }}</span>
             }
           </td>
         </ng-container>
@@ -79,20 +83,17 @@
             </div>
           </th>
           <td mat-cell *matCellDef="let element">
-            @if (!isLoading()) {
-              <!-- ✅ GET PERSONS ARRAY -->
+            @if (store.personsArrayForm() && $any(store.personsArrayForm())['persons']) {
               @let personsArray = $any(store.personsArrayForm())['persons'];
 
-              <!-- ✅ FIND PERSON BY ID -->
               @for (personField of personsArray; track $any(personField)['id']().value()) {
                 @if ($any(personField)['id']().value() === element.personId) {
-                  <!-- ✅ NOW ACCESS ROLE FIELD -->
                   @let roleField = $any(personField)['role'];
 
                   <mat-form-field appearance="fill"
                                   subscriptSizing="dynamic"
                                   class="role-select">
-                    <mat-select [field]="roleField">
+                    <mat-select [field]="roleField" [disabled]="isLoading()">
                       <mat-option value="father" class="select-option">
                         <mat-icon class="select-option-icon">man</mat-icon>
                         Father
@@ -109,6 +110,8 @@
                   </mat-form-field>
                 }
               }
+            } @else {
+              <span>{{ element.role }}</span>
             }
           </td>
         </ng-container>
