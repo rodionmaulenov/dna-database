@@ -49,36 +49,22 @@ def _build_person_data(person: Person) -> PersonData:
 
 
 def build_parent_with_children_response(parent: Person) -> Optional[DNADataResponse]:
-    """
-    Build DNADataResponse for a parent with all their children
-
-    Args:
-        parent: Parent Person object (father or mother)
-
-    Returns:
-        DNADataResponse with parent and all related children, or None if error
-    """
+    """Build DNADataResponse for a parent with all their children (optimized)"""
     try:
-        # Build parent data
         parent_data = _build_person_data(parent)
 
-        # Find all children linked through any shared file
-        children_ids = set()
-        for upload_file in parent.uploaded_files.all():
-            file_children = upload_file.persons.filter(role='child')
-            children_ids.update(child.id for child in file_children)
+        # ✅ Use pre-loaded data (no new queries)
+        children_dict = {}
+        for upload_file in parent.uploaded_files.all():  # Already prefetched
+            for child in upload_file.file_children:  # Already prefetched via Prefetch
+                if child.id not in children_dict:
+                    children_dict[child.id] = child
 
-        # Get all unique children with prefetch
-        children = Person.objects.filter(
-            id__in=children_ids
-        ).prefetch_related('loci', 'uploaded_files')
+        # Build children data from dictionary
+        children_data = [_build_person_data(child) for child in children_dict.values()]
 
-        # Build children data
-        children_data = [_build_person_data(child) for child in children]
-
-        # Return response with appropriate child structure
         return DNADataResponse(
-            id=parent.pk,  # Use parent ID as record ID
+            id=parent.pk,
             parent=parent_data,
             child=children_data[0] if len(children_data) == 1 else None,
             children=children_data if len(children_data) > 1 else None,

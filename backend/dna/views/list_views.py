@@ -2,9 +2,7 @@ import logging
 
 from ninja import Router
 
-from django.db.models import Max
-
-from dna.models import Person
+from dna.models import Person, UploadedFile
 from dna.schemas import DNADataListResponse
 from dna.utils.response_builders import build_person_response, build_parent_with_children_response
 
@@ -13,28 +11,42 @@ logger = logging.getLogger(__name__)
 list_router = Router()
 
 
+from django.db.models import Max, Prefetch
+
 @list_router.get('list/', response=DNADataListResponse)
 def get_all_dna_data(request, page: int = 1, page_size: int = 20):
-    """List all DNA records grouped by parent with pagination"""
+    """List all DNA records grouped by parent with pagination (optimized)"""
 
     logger.info(f"📋 Loading all uploads - page {page}, size {page_size}")
 
-    # Get all parents ordered by most recent upload
-    parents = Person.objects.filter(
-        role__in=['father', 'mother']
-    ).annotate(
-        latest_upload=Max('uploaded_files__uploaded_at')  # ✅ Get latest upload time
-    ).prefetch_related(
-        'loci',
-        'uploaded_files__persons',
-    ).order_by('-latest_upload')  # ✅ Order by newest first
+    # ✅ Count first (unavoidable for pagination)
+    total_count = Person.objects.filter(role__in=['father', 'mother']).count()
 
-    total_count = parents.count()
+    # ✅ Prefetch children with all their data
+    children_prefetch = Prefetch(
+        'persons',
+        queryset=Person.objects.filter(role='child').prefetch_related(
+            'loci',
+            'uploaded_files'
+        ),
+        to_attr='file_children'  # Store as attribute for easy access
+    )
 
-    # Paginate parents
+    # ✅ Fetch parents with everything pre-loaded
     start = (page - 1) * page_size
     end = start + page_size
-    parents_page = parents[start:end]
+
+    parents_page = Person.objects.filter(
+        role__in=['father', 'mother']
+    ).annotate(
+        latest_upload=Max('uploaded_files__uploaded_at')
+    ).prefetch_related(
+        'loci',
+        Prefetch(
+            'uploaded_files',
+            queryset=UploadedFile.objects.prefetch_related(children_prefetch)
+        )
+    ).order_by('-latest_upload')[start:end]
 
     result = []
     for parent in parents_page:
