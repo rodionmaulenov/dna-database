@@ -7,6 +7,7 @@ export function withLocalFilterFeature(
   setRemotePersonIds: (ids: string | null) => void,
   setRemotePersonNames: (names: string | null) => void,
   setLoading: (loading: boolean) => void,
+  setExpandedRowId: (rowId: number | null) => void,
   isLoading: Signal<boolean>,
   reload: () => void,
   resetForm: () => void
@@ -38,6 +39,7 @@ export function withLocalFilterFeature(
         // Apply role when loading finishes
         const checkLoading = setInterval(() => {
           if (!isLoading()) {
+            setExpandedRowId(null);
             patchState(store, { localRoleFilter: newRoleFilter });
             clearInterval(checkLoading);
           }
@@ -51,6 +53,7 @@ export function withLocalFilterFeature(
         setRemotePersonIds(idsString);
         setRemotePersonNames(displayText);
 
+        setExpandedRowId(null);
         if (personsRole === 'child') {
           patchState(store, {localRoleFilter: 'child'});
         } else {
@@ -63,6 +66,7 @@ export function withLocalFilterFeature(
       clearFilter: () => {
         setRemotePersonIds(null);
         setRemotePersonNames(null);
+        setExpandedRowId(null);
         patchState(store, {localRoleFilter: 'parent'});
         resetForm();
         reload();

@@ -57,6 +57,7 @@ export const DnaTableStore = signalStore(
       (ids: string | null) => patchState(store, {remotePersonIds: ids}),
       (names: string | null) => patchState(store, { remotePersonNames: names }),
       (loading: boolean) => patchState(store, { isLoading: loading }),
+      (rowID: number | null) => patchState(store, { expandedRowId: rowID }),
       store.isLoading,
       store.reload,
       store.resetForm,
