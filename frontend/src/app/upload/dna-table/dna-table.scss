@@ -83,10 +83,52 @@
   border-radius: 16px 16px 0 0;
 }
 
+// Fixed column widths
+  .mat-column-number {
+    width: 80px;
+    min-width: 80px;
+    max-width: 80px;
+  }
+
+.mat-column-name {
+  width: 250px;
+  min-width: 200px;
+}
+
+.mat-column-role {
+  width: 160px;
+  min-width: 160px;
+  max-width: 160px;
+}
+
+.mat-column-loci_count {
+  width: 120px;
+  min-width: 120px;
+  max-width: 120px;
+  text-align: center;
+}
+
+.mat-column-related_person {
+  width: 200px;
+  min-width: 150px;
+}
+
+.mat-column-file {
+  width: 150px;
+  min-width: 150px;
+}
+
+.mat-column-actions {
+  width: 250px;
+  min-width: 250px;
+  max-width: 250px;
+}
+
 table {
   width: 100%;
   flex: 1;
   min-width: 1500px;
+  table-layout: fixed;
 }
 
 mat-paginator {
