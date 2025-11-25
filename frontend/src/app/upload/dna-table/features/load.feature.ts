@@ -39,7 +39,11 @@ export function withLoadFeature() {
       const loadData = rxMethod<number>(
         pipe(
           tap((pageIndex) => {
-            patchState(store, {isLoading: true, error: null, pageIndex});
+            patchState(store, {
+              isLoading: true,
+              error: null,
+              pageIndex
+            });
           }),
           switchMap((pageIndex) => {
             const personIds = store.remotePersonIds();
@@ -47,13 +51,14 @@ export function withLoadFeature() {
 
             return service.loadTableData(personIds, djangoPage, store.pageSize()).pipe(
               tap(response => {
-
                 patchState(
                   store,
                   setAllEntities(response.data, {collection: 'dnaRecords'}),
-                  {total: response.total, isLoading: false}
+                  {
+                    total: response.total,
+                    isLoading: false
+                  }
                 );
-
               }),
               catchError(error => {
                 patchState(store, {isLoading: false, error: error.message});
@@ -150,7 +155,10 @@ export function withLoadFeature() {
       };
 
       return {
-        tableData: computed(() => transformToTableData(store.dnaRecordsEntities())),
+        tableData: computed(() => {
+          const entities = store.dnaRecordsEntities();
+          return transformToTableData(entities);
+        }),
 
         hasRecords: computed(() => store.dnaRecordsEntities().length > 0),
 
