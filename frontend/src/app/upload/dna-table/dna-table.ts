@@ -93,8 +93,8 @@ export class DnaTable {
   }
 
   removeLocus(row: TableRowData, index: number) {
-    const locus = row.loci[index];
-    if (locus?.id) {
+    const locus = this.store.getLocusAtIndex(row.personId, index);  // ✅ Get from form
+    if (locus && locus.id > 0) {
       this.store.trackDeletedLocus(row.personId, locus.id);
     }
     this.store.removeLocusFromPersonById(row.personId, index);

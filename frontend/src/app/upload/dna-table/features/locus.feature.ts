@@ -78,7 +78,7 @@ export function withLocusFeature() {
       hasDeletedLoci: (personId: number): boolean => {
         const deleted = store.deletedLociByPerson().get(personId);
         return deleted !== undefined && deleted.length > 0;
-      }
+      },
     })),
   );
 }

@@ -107,6 +107,13 @@ export function withDnaFormState() {
           }));
         },
 
+        getLocusAtIndex: (personId: number, index: number): { id: number; locus_name: string; alleles: string } | null => {
+          const form = personsArrayForm!();
+          const currentValue = form.value();
+          const person = currentValue.persons.find(p => p.id === personId);
+          return person?.loci[index] || null;
+        },
+
         // ✅ Get loci names from form for specific person
         getPersonLociFromForm: (personId: number): string[] => {
           const formInstance = personsArrayForm!();
