@@ -32,7 +32,6 @@ class Person(models.Model):
     class Meta:
         indexes = [
             models.Index(fields=['role']),
-            models.Index(fields=['name']),
         ]
 
     def get_latest_upload_date(self):
