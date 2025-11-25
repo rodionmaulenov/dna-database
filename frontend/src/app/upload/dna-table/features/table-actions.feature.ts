@@ -16,11 +16,12 @@ export function withTableActionsFeature(
   getDeletedLoci: (personId: number) => number[],
   clearDeletedLoci: (personId: number) => void,
   PersonsArrayForm: () => FieldTree<PersonsArrayFormData> | null,
-  resetPersonLoci: (personId: number, loci: Array<{ locus_name: string; alleles: string }>) => void,
+  reload: () => void,
+  collapseExpandableRow: () => void,
 ) {
   return signalStoreFeature(
     withState({
-      updatingPersonId: null as number | null
+      personIdInTableRow: null as number | null
     }),
 
     withMethods((store) => {
@@ -38,29 +39,19 @@ export function withTableActionsFeature(
       }>(
         pipe(
           tap(({personId}) => {
-            patchState(store, {updatingPersonId: personId});
+            patchState(store, {personIdInTableRow: personId});
           }),
           switchMap(({personId, updates}) =>
             httpService.updatePerson(personId, updates).pipe(
-              tap((response) => {
+              tap(() => {
                 clearDeletedLoci(personId);
                 setCurrentEditingPerson(null);
-                patchState(store, {updatingPersonId: null});
-
-                // ✅ Reset form with fresh data from backend
-                if (response.data?.loci) {
-                  // ✅ Get CURRENT form order (not backend order)
-                  const form = PersonsArrayForm();
-                  if (form) {
-                    const currentPerson = form().value().persons.find(p => p.id === personId);
-                    if (currentPerson) {
-                      resetPersonLoci(personId, currentPerson.loci);  // ✅ Same order, clears dirty
-                    }
-                  }
-                }
+                patchState(store, {personIdInTableRow: null});
+                collapseExpandableRow();
+                reload();
               }),
               catchError(() => {
-                patchState(store, {updatingPersonId: null});
+                patchState(store, {personIdInTableRow: null});
                 return EMPTY;
               })
             )
@@ -150,56 +141,6 @@ export function withTableActionsFeature(
           }
 
           return false;
-        },
-
-        // ✅ Check if form is valid (no errors in ANY field)
-        isFormValid: (row: TableRowData): boolean => {
-          const personsArrayForm = PersonsArrayForm();
-          if (!personsArrayForm) return true;
-
-          const multiplePersonsForms = (personsArrayForm as any)['persons'];
-
-          for (const personForm of multiplePersonsForms) {
-            if (personForm().value()['id'] === row.personId) {
-              const nameField = (personForm as any)['name'];
-              const roleField = (personForm as any)['role'];
-              const lociForms = (personForm as any)['loci'];
-
-              // ✅ Check name field
-              if (nameField().invalid()) {
-                return false;
-              }
-
-              // ✅ Check role field
-              if (roleField().invalid()) {
-                return false;
-              }
-
-              // ✅ Check ALL loci fields (both existing and new)
-              if (lociForms && lociForms.length > 0) {
-                for (let i = 0; i < lociForms.length; i++) {
-                  const allelesField = (lociForms[i] as any)['alleles'];
-
-                  if (allelesField) {
-                    // Check if field is invalid
-                    if (allelesField().invalid()) {
-                      return false;
-                    }
-
-                    // Check if empty (especially for new loci)
-                    const value = allelesField().value();
-                    if (!value || !value.trim()) {
-                      return false;
-                    }
-                  }
-                }
-              }
-
-              break;
-            }
-          }
-
-          return true;
         },
 
         updateRow: (row: TableRowData) => {
@@ -293,7 +234,7 @@ export function withTableActionsFeature(
         },
 
         isUpdating: (row: TableRowData): boolean => {
-          return store.updatingPersonId() === row.personId;
+          return store.personIdInTableRow() === row.personId;
         },
 
       };

@@ -11,8 +11,8 @@ export function withDnaFormState() {
 
   return signalStoreFeature(
     withState({
-      currentEditingPersonId: null as number | null,
-      isEditing: false,
+      editingPersonIdInTableRow: null as number | null,
+      isEditingTableRow: false,
     }),
 
     withMethods((store) => {
@@ -27,7 +27,7 @@ export function withDnaFormState() {
         personsSignal: () => personsSignal,
 
         setCurrentEditingPerson: (personId: number | null): void => {
-          patchState(store, {currentEditingPersonId: personId, isEditing: personId !== null});
+          patchState(store, {editingPersonIdInTableRow: personId, isEditingTableRow: personId !== null});
         },
 
         // ✅ LOAD ALL PERSONS AT ONCE (when data arrives from backend)
@@ -94,38 +94,6 @@ export function withDnaFormState() {
                 : p
             )
           }));
-        },
-
-        markPersonFieldsDirty: (personId: number): void => {
-          const form = personsArrayForm!();
-
-          // Trigger validation by updating value with same value
-          form.value.update(data => ({
-            persons: data.persons.map(p =>
-              p.id === personId
-                ? {
-                  ...p,
-                  loci: p.loci.map(l => ({ ...l }))
-                }
-                : p
-            )
-          }));
-        },
-
-        resetPersonLoci: (personId: number, loci: Array<{ locus_name: string; alleles: string }>): void => {
-          const formInstance = personsArrayForm!();
-          const currentValue = formInstance.value();
-
-          // Build new persons array with updated loci
-          const newPersons = currentValue.persons.map(p =>
-            p.id === personId
-              ? { ...p, loci: loci }
-              : p
-          );
-
-          // ✅ Reset entire form and set new value (clears dirty state)
-          formInstance.reset();
-          formInstance.value.set({ persons: newPersons });
         },
 
         // ✅ Get loci names from form for specific person

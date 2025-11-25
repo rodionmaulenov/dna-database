@@ -47,7 +47,8 @@ export const DnaTableStore = signalStore(
       store.getDeletedLoci,
       store.clearDeletedLoci,
       store.personsArrayForm,
-      store.resetPersonLoci,
+      store.reload,
+      store.collapseAll,
     )
   ),
 
@@ -57,7 +58,7 @@ export const DnaTableStore = signalStore(
       (ids: string | null) => patchState(store, {remotePersonIds: ids}),
       (names: string | null) => patchState(store, { remotePersonNames: names }),
       (loading: boolean) => patchState(store, { isLoading: loading }),
-      (rowID: number | null) => patchState(store, { expandedRowId: rowID }),
+      store.collapseAll,
       store.isLoading,
       store.reload,
       store.resetForm,

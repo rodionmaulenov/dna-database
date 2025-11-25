@@ -4,7 +4,7 @@ from ninja import Router
 
 from dna.models import Person, UploadedFile
 from dna.schemas import DNADataListResponse
-from dna.utils.response_builders import build_person_response
+from dna.utils.response_builders import build_person_response, build_parent_with_children_response
 
 logger = logging.getLogger(__name__)
 
@@ -13,52 +13,39 @@ list_router = Router()
 
 @list_router.get('list/', response=DNADataListResponse)
 def get_all_dna_data(request, page: int = 1, page_size: int = 20):
-    """
-    List all DNA records with pagination (optimized)
-    """
-    try:
-        logger.info(f"📋 Loading all uploads - page {page}, size {page_size}")
+    """List all DNA records grouped by parent with pagination"""
 
-        # ✅ OPTIMIZATION 1: Get total count efficiently (no data fetch)
-        total_count = UploadedFile.objects.count()
+    logger.info(f"📋 Loading all uploads - page {page}, size {page_size}")
 
-        # ✅ OPTIMIZATION 2: Only fetch needed page with single prefetch
-        start = (page - 1) * page_size
-        end = start + page_size
+    # Get all parents with prefetch
+    parents = Person.objects.filter(
+        role__in=['father', 'mother']
+    ).prefetch_related(
+        'loci',
+        'uploaded_files__persons',  # ✅ Prefetch children through files
+    ).order_by('-id')
 
-        uploads = UploadedFile.objects.prefetch_related(
-            'persons__loci',
-            'persons__uploaded_files'
-        ).order_by('-uploaded_at')[start:end]
+    total_count = parents.count()
 
-        # ✅ OPTIMIZATION 3: Process in single pass (no redundant checks)
-        result = []
+    # Paginate parents
+    start = (page - 1) * page_size
+    end = start + page_size
+    parents_page = parents[start:end]
 
-        for upload in uploads:
-            all_persons_in_file = upload.persons.all()  # Already prefetched
+    result = []
+    for parent in parents_page:
+        response = build_parent_with_children_response(parent)  # ✅ Use new function
+        if response:
+            result.append(response)
 
-            # Check if has parent or children (single query on prefetched data)
-            has_parent = any(p.role in ['father', 'mother'] for p in all_persons_in_file)
-            has_children = any(p.role == 'child' for p in all_persons_in_file)
+    logger.info(f"📊 Returning {len(result)} parent(s) from {total_count} total")
 
-            # Only build response if valid upload (has parent OR children)
-            if has_parent or has_children:
-                response = build_person_response(upload, all_persons_in_file)
-                if response:
-                    result.append(response)
-
-        logger.info(f"📊 Returning {len(result)} record(s) from {total_count} total uploads")
-
-        return DNADataListResponse(
-            data=result,
-            total=total_count,
-            page=page,
-            page_size=page_size
-        )
-
-    except Exception as e:
-        logger.error(f"❌ list_dna_records error: {e}", exc_info=True)
-        return DNADataListResponse(data=[], total=0, page=1, page_size=page_size)
+    return DNADataListResponse(
+        data=result,
+        total=total_count,
+        page=page,
+        page_size=page_size
+    )
 
 
 @list_router.get('filter/', response=DNADataListResponse)

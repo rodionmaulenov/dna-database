@@ -22,6 +22,10 @@ export function withExpansionFeature() {
       isRowExpanded: (personId: number) => {
         return store.expandedRowId() === personId;
       },
+
+      collapseAll: () => {
+        patchState(store, { expandedRowId: null });
+      },
     })),
   );
 }

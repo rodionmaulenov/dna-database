@@ -7,7 +7,7 @@ export function withLocalFilterFeature(
   setRemotePersonIds: (ids: string | null) => void,
   setRemotePersonNames: (names: string | null) => void,
   setLoading: (loading: boolean) => void,
-  setExpandedRowId: (rowId: number | null) => void,
+  collapseExpandable: () => void,
   isLoading: Signal<boolean>,
   reload: () => void,
   resetForm: () => void
@@ -20,12 +20,13 @@ export function withLocalFilterFeature(
     withMethods((store) => ({
 
       setRoleFilter: (role: 'parent' | 'child' | null) => {
+        collapseExpandable();
         patchState(store, {localRoleFilter: role});
       },
 
       // withLocalFilterFeature
       filterByPerson: (personId: number, personRole: string, personName: string) => {
-        // ✅ DON'T set role yet
+        collapseExpandable();
         setLoading(true);
         setRemotePersonIds(personId.toString());
         setRemotePersonNames(personName);
@@ -39,7 +40,6 @@ export function withLocalFilterFeature(
         // Apply role when loading finishes
         const checkLoading = setInterval(() => {
           if (!isLoading()) {
-            setExpandedRowId(null);
             patchState(store, { localRoleFilter: newRoleFilter });
             clearInterval(checkLoading);
           }
@@ -47,13 +47,13 @@ export function withLocalFilterFeature(
       },
 
       filterByMultiplePersons: (personIds: number[], personsRole: string, count: Number[]) => {
+        collapseExpandable();
         const idsString = personIds.join(',');
         const displayText = `${count} related persons`;
 
         setRemotePersonIds(idsString);
         setRemotePersonNames(displayText);
 
-        setExpandedRowId(null);
         if (personsRole === 'child') {
           patchState(store, {localRoleFilter: 'child'});
         } else {
@@ -64,9 +64,9 @@ export function withLocalFilterFeature(
       },
 
       clearFilter: () => {
+        collapseExpandable();
         setRemotePersonIds(null);
         setRemotePersonNames(null);
-        setExpandedRowId(null);
         patchState(store, {localRoleFilter: 'parent'});
         resetForm();
         reload();
