@@ -3,7 +3,7 @@
 
     @if (isLoading()) {
       <div class="loading-shade">
-        <mat-spinner diameter="40"></mat-spinner>
+        <mat-spinner></mat-spinner>
       </div>
     }
 
@@ -176,9 +176,7 @@
                     </a>
                     <button class="file-delete-btn"
                             (click)="confirmDeleteFile(element, file, idx)"
-                            [disabled]="store.deletingFileId() === file.id"
-                            matTooltip="Delete file"
-                            matTooltipPosition="above">
+                            [disabled]="store.deletingFileId() === file.id">
                       <mat-icon>close</mat-icon>
                     </button>
                   </div>
