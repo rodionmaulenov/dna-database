@@ -9,7 +9,7 @@ import {catchError, EMPTY, pipe, switchMap, tap} from 'rxjs';
 
 
 export function withTableActionsFeature(
-  loadPersonLoci: (personId: number, loci: Array<{ locus_name: string; alleles: string }>) => void,
+  loadPersonLoci: (personId: number, loci: Array<{ id: number; locus_name: string; alleles: string }>) => void,
   setCurrentEditingPerson: (personId: number | null) => void,
   toggleExpandedRow: (personId: number) => void,
   isRowExpanded: (personId: number) => boolean,
@@ -88,11 +88,12 @@ export function withTableActionsFeature(
 
             // ✅ Otherwise load from entity (first time opening)
             const lociData = row.loci.map(locus => ({
+              id: locus.id,  // ✅ Include ID
               locus_name: locus.locus_name,
               alleles: `${locus.allele_1 || ''}, ${locus.allele_2 || ''}`
             }));
 
-            loadPersonLoci(row.personId, lociData);
+            loadPersonLoci(row.personId, lociData)
             setCurrentEditingPerson(row.personId);
           }
         },
@@ -176,28 +177,31 @@ export function withTableActionsFeature(
             for (let i = 0; i < lociForms.length; i++) {
               const locusField = lociForms[i];
               const allelesField = (locusField as any)['alleles'];
+              const locusIdField = (locusField as any)['id'];  // ✅ Get ID from form
               const locusNameField = (locusField as any)['locus_name'];
 
               const allelesValue = allelesField ? allelesField().value() : '';
+              const locusIdValue = locusIdField ? locusIdField().value() : 0;
               const locusNameValue = locusNameField ? locusNameField().value() : '';
 
               const parts = allelesValue.split(/[,\/]/).map((p: string) => p.trim());
 
-              // ✅ Check if existing or new locus
-              const existingLocus = row.loci[i];
-
-              if (existingLocus && existingLocus.id) {
-                // ✅ EXISTING - update if dirty
+              // ✅ Match by ID, not index
+              if (locusIdValue > 0) {
+                // EXISTING locus - update if dirty
                 if (allelesField && allelesField().dirty()) {
-                  lociUpdates.push({
-                    id: existingLocus.id,
-                    locus_name: existingLocus.locus_name,
-                    allele_1: parts[0] || '',
-                    allele_2: parts[1] || ''
-                  });
+                  const existingLocus = row.loci.find(l => l.id === locusIdValue);  // ✅ Find by ID
+                  if (existingLocus) {
+                    lociUpdates.push({
+                      id: existingLocus.id,
+                      locus_name: existingLocus.locus_name,
+                      allele_1: parts[0] || '',
+                      allele_2: parts[1] || ''
+                    });
+                  }
                 }
               } else {
-                // ✅ NEW - create if has data
+                // NEW locus - create if has data
                 if (locusNameValue && allelesValue.trim()) {
                   newLoci.push({
                     locus_name: locusNameValue,

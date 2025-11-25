@@ -48,7 +48,11 @@ export function withDnaFormState() {
         },
 
         // ✅ LOAD PERSONS LOCUS AT ONCE (when toggle expand button)
-        loadPersonLoci: (personId: number, loci: Array<{ locus_name: string; alleles: string }>): void => {  // ✅ Updated type
+        loadPersonLoci: (personId: number, loci: Array<{
+          id: number;  // ✅ Add ID
+          locus_name: string;
+          alleles: string
+        }>): void => {
           const form = personsArrayForm!();
           form.value.update(data => ({
             persons: data.persons.map(p =>
@@ -78,7 +82,14 @@ export function withDnaFormState() {
           form.value.update(data => ({
             persons: data.persons.map(p =>
               p.id === personId
-                ? {...p, loci: [...p.loci, {locus_name: locusName, alleles: ''}]}
+                ? {
+                  ...p,
+                  loci: [...p.loci, {
+                    id: 0,  // ✅ New locus has ID 0
+                    locus_name: locusName,
+                    alleles: ''
+                  }]
+                }
                 : p
             )
           }));

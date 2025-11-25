@@ -1,6 +1,7 @@
 import {schema, required, Schema, validate} from '@angular/forms/signals';
 
 export interface LocusEditFormData {
+  id: number;
   locus_name: string;
   alleles: string;
 }
