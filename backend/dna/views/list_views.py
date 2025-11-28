@@ -2,6 +2,8 @@ import logging
 
 from ninja import Router
 
+from django.db.models import Max, Prefetch
+
 from dna.models import Person, UploadedFile
 from dna.schemas import DNADataListResponse
 from dna.utils.response_builders import build_person_response, build_parent_with_children_response, \
@@ -12,67 +14,63 @@ logger = logging.getLogger(__name__)
 list_router = Router()
 
 
-from django.db.models import Max, Prefetch
-
 @list_router.get('list/', response=DNADataListResponse)
 def get_all_dna_data(request, page: int = 1, page_size: int = 20):
-    """List all DNA records grouped by parent with pagination (optimized)"""
+    logger.info(f"📋 Loading page {page}, size {page_size}")
 
-    logger.info(f"📋 Loading all uploads - page {page}, size {page_size}")
+    start: int = (page - 1) * page_size
+    end: int = start + page_size
 
-    # ✅ Count first (unavoidable for pagination)
-    total_count = Person.objects.filter(role__in=['father', 'mother']).count()
+    # Single query for parents count
+    parents_count: int = Person.objects.filter(role__in=['father', 'mother']).count()
 
-    # ✅ Prefetch children with all their data
+    # Orphan children using NOT EXISTS (faster than exclude__in)
+    orphan_children_qs = Person.objects.filter(role='child').exclude(
+        uploaded_files__persons__role__in=['father', 'mother']
+    ).distinct()
+
+    orphans_count: int = orphan_children_qs.count()
+    total_count: int = parents_count + orphans_count
+
+    # Prefetch setup
     children_prefetch = Prefetch(
         'persons',
-        queryset=Person.objects.filter(role='child').prefetch_related(
-            'loci',
-            'uploaded_files'
-        ),
-        to_attr='file_children'  # Store as attribute for easy access
+        queryset=Person.objects.filter(role='child').prefetch_related('loci', 'uploaded_files'),
+        to_attr='file_children'
     )
 
-    # ✅ Fetch parents with everything pre-loaded
-    start = (page - 1) * page_size
-    end = start + page_size
-
-    parents_page = Person.objects.filter(
-        role__in=['father', 'mother']
-    ).annotate(
-        latest_upload=Max('uploaded_files__uploaded_at')
-    ).prefetch_related(
-        'loci',
-        Prefetch(
-            'uploaded_files',
-            queryset=UploadedFile.objects.prefetch_related(children_prefetch)
-        )
-    ).order_by('-latest_upload')[start:end]
-
     result = []
-    for parent in parents_page:
-        response = build_parent_with_children_response(parent)
-        if response:
-            result.append(response)
 
-    # Add orphan children (children not linked to any parent)
-    parent_file_ids = Person.objects.filter(
-        role__in=['father', 'mother']
-    ).values_list('uploaded_files__id', flat=True)
+    # Case 1: Page is within parents range
+    if start < parents_count:
+        parents = Person.objects.filter(
+            role__in=['father', 'mother']
+        ).annotate(
+            latest_upload=Max('uploaded_files__uploaded_at')
+        ).prefetch_related(
+            'loci',
+            Prefetch('uploaded_files', queryset=UploadedFile.objects.prefetch_related(children_prefetch))
+        ).order_by('-latest_upload')[start:end]
 
-    orphan_children = Person.objects.filter(role='child').exclude(
-        uploaded_files__id__in=parent_file_ids
-    ).annotate(
-        latest_upload=Max('uploaded_files__uploaded_at')
-    ).prefetch_related('loci', 'uploaded_files').order_by('-latest_upload').distinct()
+        for parent in parents:
+            response = build_parent_with_children_response(parent)
+            if response:
+                result.append(response)
 
-    for orphan in orphan_children:
-        response = build_orphan_child_response(orphan)
-        if response:
-            result.append(response)
+    # Case 2: Need orphans to fill page
+    remaining_slots: int = page_size - len(result)
+    if remaining_slots > 0:
+        orphan_start: int = max(0, start - parents_count)
+        orphan_end: int = orphan_start + remaining_slots
 
-    # Update total count to include orphans
-    total_count += orphan_children.count()
+        orphans = orphan_children_qs.annotate(
+            latest_upload=Max('uploaded_files__uploaded_at')
+        ).prefetch_related('loci', 'uploaded_files').order_by('-latest_upload')[orphan_start:orphan_end]
+
+        for orphan in orphans:
+            response = build_orphan_child_response(orphan)
+            if response:
+                result.append(response)
 
     logger.info(f"📊 Returning {len(result)} records from {total_count} total")
 
