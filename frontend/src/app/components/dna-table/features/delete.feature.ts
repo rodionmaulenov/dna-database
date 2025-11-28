@@ -4,32 +4,33 @@ import {rxMethod} from '@ngrx/signals/rxjs-interop';
 import {pipe, switchMap, tap, catchError, EMPTY} from 'rxjs';
 import {DnaTableHttpService} from '../dna-table.service';
 
-export function withDeleteFeature(reload: () => void) {
+export function withDeleteFeature(reload: () => void, clearSelection: () => void) {
   return signalStoreFeature(
-    // State
+
     withState({
-      deletingPersonId: null as number | null,
+      deletingPersonIds: null as number[] | null,
       deletingFileId: null as number | null,
+      isDeleting: false,
     }),
 
     // Methods
     withMethods((store) => {
       const service = inject(DnaTableHttpService);
 
-      // ✅ Delete person
-      const deletePerson = rxMethod<number>(
+      const deletePersons = rxMethod<number[]>(
         pipe(
-          tap((personId) =>
-            patchState(store, {deletingPersonId: personId})
+          tap((personIds) =>
+            patchState(store, {deletingPersonIds: personIds, isDeleting: true}),
           ),
           switchMap((personId) =>
-            service.deletePerson(personId).pipe(
+            service.deletePersons(personId).pipe(
               tap(() => {
-                patchState(store, {deletingPersonId: null});
+                patchState(store, {deletingPersonIds: null, isDeleting: false});
+                clearSelection();
                 reload();
               }),
               catchError(() => {
-                patchState(store, {deletingPersonId: null});
+                patchState(store, {deletingPersonIds: null, isDeleting: false});
                 return EMPTY;
               })
             )
@@ -37,7 +38,6 @@ export function withDeleteFeature(reload: () => void) {
         )
       );
 
-      // ✅ Delete file (reactive)
       const deleteFile = rxMethod<{ personId: number; fileId: number }>(
         pipe(
           tap(({fileId}) =>
@@ -59,8 +59,7 @@ export function withDeleteFeature(reload: () => void) {
       );
 
       return {
-        deletePerson,
-
+        deletePersons,
         deleteFile,
 
       };

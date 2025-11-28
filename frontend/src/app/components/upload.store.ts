@@ -81,7 +81,7 @@ export const UploadStore = signalStore(
             const filesToUpload = store.files().filter(f => f.status === 'idle');
 
             if (filesToUpload.length === 0) {
-              notificationService.warning('No files to upload');
+              notificationService.warning('No files to components');
               return;
             }
 

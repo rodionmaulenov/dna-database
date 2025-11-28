@@ -1,6 +1,6 @@
 import {ChangeDetectionStrategy, Component} from '@angular/core';
 import {RouterOutlet} from '@angular/router';
-import {Upload} from './upload/upload';
+import {Upload} from './components/upload';
 
 @Component({
   selector: 'app-root',

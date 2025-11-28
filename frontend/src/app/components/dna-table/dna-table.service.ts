@@ -28,19 +28,15 @@ export class DnaTableHttpService {
   }
 
   updatePerson(personId: number, data: UpdatePersonData): Observable<UpdatePersonResponse> {
-    return this.http.patch<UpdatePersonResponse>(
-      `${this.apiUrl}/dna/person/update/${personId}/`,
-      data
-    );
+    return this.http.patch<UpdatePersonResponse>(`${this.apiUrl}/dna/person/update/${personId}/`, data);
   }
 
-  deletePerson(personId: number): Observable<void> {
-    return this.http.delete<void>(`${this.apiUrl}/dna/person/delete/${personId}/`);
+  deletePersons(personIds: number[]): Observable<any> {
+    const params = new HttpParams().set('person_ids', personIds.join(','));
+    return this.http.delete<any>(`${this.apiUrl}/dna/person/delete-multiple/`, { params });
   }
 
   deleteFile(fileId: number): Observable<DeleteFileResponse> {
-    return this.http.delete<DeleteFileResponse>(
-      `${this.apiUrl}/dna/file/delete/${fileId}/`
-    );
+    return this.http.delete<DeleteFileResponse>(`${this.apiUrl}/dna/file/delete/${fileId}/`);
   }
 }

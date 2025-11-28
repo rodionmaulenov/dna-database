@@ -1,0 +1,38 @@
+:host{
+  display: block;
+}
+
+.loci-section {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 30px;
+
+  .locus-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+
+    .locus-field {
+      width: 130px;
+    }
+
+    button {
+      display: flex;
+      justify-content: center;
+      margin-top: 8px;
+    }
+  }
+
+  .add-locus-button {
+    margin-bottom: 8px;
+    margin-left: 20px;
+  }
+
+  .remove-locus-icon{
+    font-size: 22px;
+    width: 22px;
+    height: 22px;
+  }
+}

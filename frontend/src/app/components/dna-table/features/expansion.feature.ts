@@ -11,10 +11,8 @@ export function withExpansionFeature() {
         const currentId = store.expandedRowId();
 
         if (currentId === personId) {
-          // Collapse if clicking same row
           patchState(store, { expandedRowId: null });
         } else {
-          // Expand new row (auto-collapses previous)
           patchState(store, { expandedRowId: personId });
         }
       },

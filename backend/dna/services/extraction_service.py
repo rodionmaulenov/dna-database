@@ -10,11 +10,14 @@ Main functions:
 import logging
 import json
 import os
+from typing import Dict, Any, Optional
 
 import anthropic
 
 from dna.services.textract_service import TextractService
 from dna.pdf_processor import process_dna_report_pdf
+from dna.utils.file_helpers import save_temp_file
+from dna.services.dna_persistence_service import save_dna_extraction_to_database
 
 logger = logging.getLogger(__name__)
 
@@ -579,64 +582,61 @@ def convert_to_save_format(extraction_result: dict) -> dict:
 # FULL PIPELINE: EXTRACT AND SAVE
 # ============================================================
 
-def extract_and_save(file, filename: str = None) -> dict:
+def extract_and_save(file: Any, filename: Optional[str] = None) -> Dict[str, Any]:
     """
     Full pipeline: Extract DNA from PDF and save to database.
-
-    This is the main function for production use.
 
     Args:
         file: Uploaded file object (Django/Ninja)
         filename: Optional filename override
 
     Returns:
-        {
-            'success': True/False,
-            'persons': [...],  # Extracted data
-            'laboratory': '...',
-            'loci_count': int,
-            'fixes_applied': [...],
-            'saved_to_db': True/False,
-            'uploaded_file_id': int (if saved),
-            'save_errors': [...],
-        }
+        Dict with keys:
+            - success: bool
+            - persons: List[Dict] (extracted data)
+            - laboratory: str
+            - loci_count: int
+            - fixes_applied: List[str]
+            - saved_to_db: bool
+            - uploaded_file_id: Optional[int]
+            - save_errors: List[str]
+            - links: List[Dict] (for duplicate error navigation)
     """
-    from dna.utils.file_helpers import save_temp_file
-    from dna.services.dna_persistence_service import save_dna_extraction_to_database
 
     # Step 1: Save to temp
-    temp_path = save_temp_file(file)
+    temp_path: str = save_temp_file(file)
     logger.info(f"📁 Temp file: {temp_path}")
 
     if not filename:
         filename = getattr(file, 'name', 'dna_report.pdf')
 
     # Step 2: Extract from PDF
-    result = extract_from_pdf(temp_path)
+    result: Dict[str, Any] = extract_from_pdf(temp_path)
 
     # Step 3: If extraction failed, cleanup and return
-    if not result['success']:
+    if not result.get('success', False):
         if os.path.exists(temp_path):
             os.remove(temp_path)
         return result
 
     # Step 4: Convert format for database
-    save_format = convert_to_save_format(result)
+    save_format: Dict[str, Any] = convert_to_save_format(result)
 
     # Step 5: Save to database
-    save_result = save_dna_extraction_to_database(
+    save_result: Dict[str, Any] = save_dna_extraction_to_database(
         extraction_result=save_format,
         filename=filename,
-        local_file_path=temp_path  # persistence service handles cleanup
+        local_file_path=temp_path
     )
 
     # Step 6: Merge results
     result['saved_to_db'] = save_result.get('success', False)
     result['uploaded_file_id'] = save_result.get('uploaded_file_id')
     result['save_errors'] = save_result.get('errors', [])
+    result['links'] = save_result.get('links', [])
 
     # Log final cost
-    cost = result.get('cost', {})
+    cost: Dict[str, Any] = result.get('cost', {})
     if cost:
         logger.info(f"💰 Total extraction cost: ${cost.get('total', 0):.4f}")
 

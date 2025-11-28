@@ -34,9 +34,16 @@ class MatchResult(BaseModel):
     total_loci: int
 
 
+class LinkInfo(BaseModel):
+    person_id: int
+    name: str
+    role: str
+
+
 class FileUploadResponse(BaseModel):
     success: bool
     errors: Optional[List[str]] = Field(default=None)
+    links: Optional[List[LinkInfo]] = Field(default=None)
     top_matches: Optional[List[MatchResult]] = Field(default=None)
 
     class Config:

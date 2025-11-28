@@ -75,6 +75,31 @@ def build_parent_with_children_response(parent: Person) -> Optional[DNADataRespo
         return None
 
 
+def build_orphan_child_response(child: Person) -> Optional[DNADataResponse]:
+    """
+    Build DNADataResponse for orphan child (no parent).
+
+    Args:
+        child: Person object with role='child'
+
+    Returns:
+        DNADataResponse with parent=None
+    """
+    try:
+        child_data = _build_person_data(child)
+
+        return DNADataResponse(
+            id=child.pk,
+            parent=None,
+            child=child_data,
+            children=None,
+        )
+
+    except Exception as e:
+        logger.error(f"❌ build_orphan_child_response error: {e}", exc_info=True)
+        return None
+
+
 # ✅ Keep old function for backward compatibility (filtering by upload)
 def build_person_response(upload, all_persons_in_file) -> Optional[DNADataResponse]:
     """

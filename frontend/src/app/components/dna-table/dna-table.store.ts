@@ -8,20 +8,16 @@ import {withDnaFormActions} from './features/dna-form-actions.feature';
 import {withExpansionFeature} from './features/expansion.feature';
 import {withTableActionsFeature} from './features/table-actions.feature';
 import {withLocalFilterFeature} from './features/local-filter.feature';
+import {WithTableSelection} from './features/table-selection.feature';
 
 
 export const DnaTableStore = signalStore(
   {providedIn: 'root'},
 
-
   withLoadFeature(),
 
   withFeature((store) =>
     withUploadFeature(() => store.setDnaRecordsLoading())
-  ),
-
-  withFeature((store) =>
-    withDeleteFeature(() => store.setDnaRecordsLoading())
   ),
 
   withExpansionFeature(),
@@ -56,11 +52,25 @@ export const DnaTableStore = signalStore(
     withLocalFilterFeature(
       store.tableData,
       (ids: string | null) => patchState(store, {remotePersonIds: ids}),
-      (names: string | null) => patchState(store, { remotePersonNames: names }),
-      (loading: boolean) => patchState(store, { isLoading: loading }),
+      (names: string | null) => patchState(store, {remotePersonNames: names}),
+      (loading: boolean) => patchState(store, {isLoading: loading}),
       store.collapseAll,
       store.isLoading,
       store.reload,
+    )
+  ),
+
+  withFeature((store) =>
+    WithTableSelection(
+      store.dataSource,
+      store.selection
+    )
+  ),
+
+  withFeature((store) =>
+    withDeleteFeature(() =>
+      store.setDnaRecordsLoading(),
+      store.clearSelection,
     )
   ),
 );

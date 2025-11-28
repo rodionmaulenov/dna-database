@@ -60,21 +60,14 @@ def cleanup_temp_file(file_path: str) -> None:
             logger.warning(f"⚠️ Failed to cleanup {file_path}: {e}")
 
 
-def delete_uploaded_files(uploaded_files) -> int:
-    """
-    Delete multiple UploadedFile objects and their physical files
-
-    Args:
-        uploaded_files: QuerySet of UploadedFile objects
-
-    Returns:
-        Number of files deleted
-    """
+def delete_uploaded_files_with_storage(uploaded_files, storage_service) -> int:
+    """Delete files from storage and database"""
     count = 0
     for file_obj in uploaded_files:
         if file_obj.file:
-            file_obj.file.delete(save=False)
-            logger.info(f"  Deleted file: {file_obj.file.name}")
+            file_path = file_obj.file.name
+            storage_service.delete_file(file_path)
+            logger.info(f"  Deleted file: {file_path}")
         file_obj.delete()
         count += 1
     return count

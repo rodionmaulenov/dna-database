@@ -10,7 +10,7 @@ import { DnaTableStore } from './dna-table/dna-table.store';
 
 
 @Component({
-  selector: 'app-upload',
+  selector: 'app-components',
   standalone: true,
   imports: [
     MatButtonModule, MatIconModule, MatButtonToggleModule, MatChipsModule, DnaTable
@@ -26,7 +26,7 @@ export class Upload {
   openUploadSheet(): void {
     const sheetRef = this.bottomSheet.open(UploadTopSheet, {
       hasBackdrop: true,
-      panelClass: 'upload-top-sheet'
+      panelClass: 'components-top-sheet'
     });
 
     sheetRef.afterDismissed().subscribe((result) => {

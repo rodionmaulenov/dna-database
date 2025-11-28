@@ -4,7 +4,8 @@ from ninja import Router
 
 from dna.models import Person, UploadedFile
 from dna.schemas import DNADataListResponse
-from dna.utils.response_builders import build_person_response, build_parent_with_children_response
+from dna.utils.response_builders import build_person_response, build_parent_with_children_response, \
+    build_orphan_child_response
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,26 @@ def get_all_dna_data(request, page: int = 1, page_size: int = 20):
         if response:
             result.append(response)
 
-    logger.info(f"📊 Returning {len(result)} parent(s) from {total_count} total")
+    # Add orphan children (children not linked to any parent)
+    parent_file_ids = Person.objects.filter(
+        role__in=['father', 'mother']
+    ).values_list('uploaded_files__id', flat=True)
+
+    orphan_children = Person.objects.filter(role='child').exclude(
+        uploaded_files__id__in=parent_file_ids
+    ).annotate(
+        latest_upload=Max('uploaded_files__uploaded_at')
+    ).prefetch_related('loci', 'uploaded_files').order_by('-latest_upload').distinct()
+
+    for orphan in orphan_children:
+        response = build_orphan_child_response(orphan)
+        if response:
+            result.append(response)
+
+    # Update total count to include orphans
+    total_count += orphan_children.count()
+
+    logger.info(f"📊 Returning {len(result)} records from {total_count} total")
 
     return DNADataListResponse(
         data=result,

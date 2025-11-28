@@ -1,4 +1,4 @@
-//::ng-deep .upload-top-sheet {
+//::ng-deep .components-top-sheet {
 //  .mat-bottom-sheet-container {
 //    position: fixed;
 //    top: 0;
@@ -13,7 +13,7 @@
 //  }
 //}
 //
-//.upload-sheet-container {
+//.components-sheet-container {
 //  padding: 24px;
 //  min-height: 300px;
 //  max-height: 80vh;
@@ -21,7 +21,7 @@
 //  flex-direction: column;
 //}
 //
-//.upload-controls {
+//.components-controls {
 //  display: flex;
 //  gap: 12px;
 //  margin-bottom: 24px;
@@ -102,14 +102,14 @@
 //  75% { content: '...'; }
 //}
 //
-//.person-link-upload {
+//.person-link-components {
 //  cursor: pointer;
 //  color: #004f4f;
 //  text-decoration: none;
 //  transition: all 0.2s ease;
 //}
 //
-//.person-link-upload:hover {
+//.person-link-components:hover {
 //  text-decoration: underline;
 //}
 //
@@ -140,7 +140,7 @@
 //}
 //
 //
-//.upload-progress-bar {
+//.components-progress-bar {
 //  margin-top: 8px;
 //  height: 4px;
 //}

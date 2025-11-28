@@ -1,4 +1,4 @@
-// src/app/upload/shared-models.ts
+// src/app/components/shared-models.ts
 
 // ============================================================================
 // CORE DNA DATA MODELS
@@ -73,9 +73,17 @@ export interface MatchResult {
   total_loci: number;
 }
 
+export interface LinkInfo {
+  person_id: number;
+  name: string;
+  role: string
+}
+
+
 export interface FileUploadResponse {
   success: boolean;
   errors: string[] | null;
+  links?: LinkInfo[];
   top_matches?: MatchResult[];
 }
 

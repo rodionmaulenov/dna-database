@@ -34,13 +34,8 @@ class Person(models.Model):
             models.Index(fields=['role']),
         ]
 
-    def get_latest_upload_date(self):
-        """Get the most recent upload date for this person"""
-        return self.uploaded_files.order_by(
-            '-uploaded_at').first().uploaded_at if self.uploaded_files.exists() else None
 
-
-# ✅ Junction table to track which file each person came from
+# Junction table to track which file each person came from
 class PersonFile(models.Model):
     person = models.ForeignKey(Person, on_delete=models.CASCADE)
     uploaded_file = models.ForeignKey(UploadedFile, on_delete=models.CASCADE)

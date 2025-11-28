@@ -8,17 +8,17 @@ const ALL_LOCI = [
   'Penta D', 'Penta E',
 ] as const;
 
-interface LocusState {
-  deletedLociByPerson: Map<number, number[]>;  // personId -> locusIds[]
-  addingLocusForPerson: number | null;          // Which person is adding a locus
+interface LociTrackingState {
+  pendingDeletedLoci: Map<number, number[]>;  // personId -> locusIds[]
+  activeAddingPersonId: number | null;        // Which person is adding
 }
 
 export function withLocusFeature() {
   return signalStoreFeature(
     // State
-    withState<LocusState>({
-      deletedLociByPerson: new Map(),
-      addingLocusForPerson: null
+    withState<LociTrackingState>({
+      pendingDeletedLoci: new Map(),
+      activeAddingPersonId: null
     }),
 
     // Methods
@@ -26,41 +26,41 @@ export function withLocusFeature() {
       // Start adding locus UI
       startAddingLocus: (personId: number) => {
         patchState(store, {
-          addingLocusForPerson: personId
+          activeAddingPersonId: personId
         });
       },
 
       // Cancel adding locus
       cancelAddingLocus: () => {
         patchState(store, {
-          addingLocusForPerson: null
+          activeAddingPersonId: null
         });
       },
 
       // Track deleted locus (for backend sync)
       trackDeletedLocus: (personId: number, locusId: number) => {
-        const deletedMap = new Map(store.deletedLociByPerson());
+        const deletedMap = new Map(store.pendingDeletedLoci());
         const existing = deletedMap.get(personId) || [];
 
         if (!existing.includes(locusId)) {
           deletedMap.set(personId, [...existing, locusId]);
           patchState(store, {
-            deletedLociByPerson: deletedMap
+            pendingDeletedLoci: deletedMap
           });
         }
       },
 
       // Get deleted loci for person
       getDeletedLoci: (personId: number): number[] => {
-        return store.deletedLociByPerson().get(personId) || [];
+        return store.pendingDeletedLoci().get(personId) || [];
       },
 
       // Clear deleted loci after successful update
       clearDeletedLoci: (personId: number) => {
-        const deletedMap = new Map(store.deletedLociByPerson());
+        const deletedMap = new Map(store.pendingDeletedLoci());
         deletedMap.delete(personId);
         patchState(store, {
-          deletedLociByPerson: deletedMap
+          pendingDeletedLoci: deletedMap
         });
       },
 
@@ -71,12 +71,12 @@ export function withLocusFeature() {
 
       // Check if person is adding locus
       isAddingLocus: (personId: number): boolean => {
-        return store.addingLocusForPerson() === personId;
+        return store.activeAddingPersonId() === personId;
       },
 
       // Check if person has deleted loci
       hasDeletedLoci: (personId: number): boolean => {
-        const deleted = store.deletedLociByPerson().get(personId);
+        const deleted = store.pendingDeletedLoci().get(personId);
         return deleted !== undefined && deleted.length > 0;
       },
     })),

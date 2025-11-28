@@ -1,6 +1,6 @@
 <div class="upload-sheet-container">
 
-  <!-- File input & upload button -->
+  <!-- File input & components button -->
   <div class="upload-controls">
     <input
       #fileInput
@@ -98,10 +98,12 @@
         <!-- ✅ ERROR MESSAGE IN SEPARATE ROW -->
         @if (fileWithStatus.status === 'error') {
           <div class="error-message-container">
-            <span
-              [innerHTML]="formatErrorMessage(fileWithStatus.response?.errors?.[0])"
-              (click)="handleErrorLinkClick($event)">
-            </span>
+            <span>{{ fileWithStatus.response?.errors?.[0] }}</span>
+            @for (link of fileWithStatus.response?.links; track link.person_id) {
+              <a class="person-error-link" (click)="viewPerson(link.person_id, link.role, link.name)">
+                [{{ link.role }}]
+              </a>
+            }
           </div>
         }
 

@@ -19,7 +19,6 @@ Supports:
 import logging
 import os
 from typing import Dict, Any, List
-from urllib.parse import quote
 
 from django.db import transaction
 from django.core.files import File as DjangoFile
@@ -103,9 +102,39 @@ def save_dna_extraction_to_database(
         # ERROR CASES
         # ═══════════════════════════════════════════════
 
-        # Case 1: Child-only upload (ACCEPT with warning)
+        # Case 1: Child-only upload - check for duplicate children
         if not has_parent and has_children:
             logger.warning(f"⚠️ Child-only upload detected: {filename} (no parent in file)")
+            logger.info(f"DEBUG: duplicate_children = {duplicate_children}")
+            logger.info(f"DEBUG: new_children count = {len(new_children)}")
+
+            # Check if any children already exist
+            if len(duplicate_children) > 0 and len(new_children) == 0:
+                duplicate_names = []
+                links = []
+
+                for child in duplicate_children:
+                    if isinstance(child, dict):
+                        duplicate_names.append(child['name'])
+                        if child.get('person_id'):
+                            links.append({
+                                'person_id': child['person_id'],
+                                'name': child['name'],
+                                'role': 'child'
+                            })
+                    else:
+                        duplicate_names.append(str(child))
+
+                logger.info(f"DEBUG: links before return = {links}")
+
+                error_message = f"Duplicate children: {', '.join(duplicate_names)} already exist in database."
+                logger.error(error_message)
+
+                return {
+                    'success': False,
+                    'errors': [error_message],
+                    'links': links
+                }
 
         # Case 2: No data at all
         if not has_parent and not has_children:
@@ -113,6 +142,7 @@ def save_dna_extraction_to_database(
             return {
                 'success': False,
                 'errors': ["No DNA data found in file"],
+                'links': []
             }
 
         # Case 3: Parent exists + NO new children
@@ -129,30 +159,30 @@ def save_dna_extraction_to_database(
                     else:
                         duplicate_names.append(child)
 
-                # ✅ Add name to URL (encoded)
-                parent_link = f"/table?personId={existing_parent.id}&name={quote(existing_parent.name)} [parent]"
-                child_links = ' '.join([
-                    f"/table?personId={pid}&name={quote(duplicate_names[i])} [child]"
-                    for i, pid in enumerate(duplicate_person_ids) if pid
-                ])
+                # Build links array
+                links = [
+                    {'person_id': existing_parent.id, 'name': existing_parent.name, 'role': 'parent'}
+                ]
+                for i, pid in enumerate(duplicate_person_ids):
+                    if pid:
+                        links.append({'person_id': pid, 'name': duplicate_names[i], 'role': 'child'})
 
                 if len(duplicate_children) == 1:
                     error_message = (
                         f"Duplicate detected: {existing_parent.name} and "
-                        f"{duplicate_names[0]} already exist in database. "
-                        f"View: {parent_link} {child_links}"
+                        f"{duplicate_names[0]} already exist in database."
                     )
                 else:
                     error_message = (
                         f"Duplicate detected: {existing_parent.name} and "
-                        f"{', '.join(duplicate_names)} already exist in database. "
-                        f"View: {parent_link} {child_links}"
+                        f"{', '.join(duplicate_names)} already exist in database."
                     )
 
                 logger.error(error_message)
                 return {
                     'success': False,
                     'errors': [error_message],
+                    'links': links
                 }
 
             else:
@@ -161,24 +191,24 @@ def save_dna_extraction_to_database(
                 existing_loci_count = existing_parent.loci_count
 
                 if new_loci_count > existing_loci_count:
-                    # ✅ ACCEPT: New file has more loci - will merge
                     logger.info(
                         f"Accepting parent-only upload: {existing_parent.name} "
                         f"({existing_loci_count}→{new_loci_count} loci)"
                     )
                     # Continue to save section below
                 else:
-                    # ❌ REJECT: No benefit
                     error_message = (
                         f"Duplicate parent: {existing_parent.name} already has "
-                        f"{existing_loci_count} loci (uploaded file has {new_loci_count}). "
-                        f"View: /table?personId={existing_parent.id} [parent]"
+                        f"{existing_loci_count} loci (uploaded file has {new_loci_count})."
                     )
 
                     logger.error(error_message)
                     return {
                         'success': False,
                         'errors': [error_message],
+                        'links': [
+                            {'person_id': existing_parent.id, 'name': existing_parent.name, 'role': 'parent'}
+                        ]
                     }
 
         # ═══════════════════════════════════════════════

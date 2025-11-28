@@ -1,0 +1,38 @@
+@let personField = getPersonFormFields();
+
+@if (personField) {
+  @let nameField = $any(personField)['name'];
+  @let roleField = $any(personField)['role'];
+
+  <div class="person-form-container">
+    <mat-form-field appearance="outline" class="name-field" subscriptSizing="dynamic">
+      <mat-label>Name</mat-label>
+      <input matInput [field]="nameField" [errorStateMatcher]="immediateErrorMatcher">
+      <mat-error>
+        @if (nameField().errors().length > 0) {
+          @for (error of nameField().errors(); track error.kind) {
+            {{ error.message }}
+          }
+        }
+      </mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="role-field" subscriptSizing="dynamic">
+      <mat-label>Role</mat-label>
+      <mat-select [field]="roleField">
+        <mat-option value="father">
+          <mat-icon>man</mat-icon>
+          Father
+        </mat-option>
+        <mat-option value="mother">
+          <mat-icon>woman</mat-icon>
+          Mother
+        </mat-option>
+        <mat-option value="child">
+          <mat-icon>child_care</mat-icon>
+          Child
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
+}

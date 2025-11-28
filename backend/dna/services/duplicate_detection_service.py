@@ -12,51 +12,156 @@ from dna.constants import CRITICAL_LOCI
 logger = logging.getLogger(__name__)
 
 
-def check_parent_and_children_duplicates(extraction_result: Dict[str, Any]) -> Dict[str, Any]:
+def _check_children_duplicates_global(
+        children_data: List[Dict[str, Any]]
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
-    Intelligent duplicate detection with DNA fingerprint matching
+    Check uploaded children against ALL existing children in database.
+    Used for child-only uploads (no parent in file).
+
+    Args:
+        children_data: List of child dicts with 'name' and 'loci' keys
+
+    Returns:
+        Tuple of (new_children, duplicate_children)
+        - new_children: children not found in database
+        - duplicate_children: children with 80%+ DNA match, includes person_id
+    """
+    existing_children = Person.objects.filter(role='child')
+
+    logger.info(
+        f"Checking {len(children_data)} children against "
+        f"{existing_children.count()} existing children (global)"
+    )
+
+    new_children: List[Dict[str, Any]] = []
+    duplicate_children: List[Dict[str, Any]] = []
+
+    for child_data in children_data:
+        child_loci = child_data.get('loci', [])
+        child_name = child_data.get('name', 'Unknown')
+        child_fingerprint = build_fingerprint(child_loci, CRITICAL_LOCI)
+
+        # Not enough loci for comparison - accept as new
+        if len(child_fingerprint) < 4:
+            logger.info(f"  Child {child_name}: Not enough loci ({len(child_fingerprint)}), accepting as new")
+            new_children.append(child_data)
+            continue
+
+        is_duplicate = False
+
+        for existing_child in existing_children:
+            existing_fingerprint = _build_person_fingerprint(existing_child, CRITICAL_LOCI)
+
+            matches, total = compare_fingerprints_exact(
+                child_fingerprint,
+                existing_fingerprint,
+                CRITICAL_LOCI
+            )
+
+            if total < 4:
+                continue
+
+            match_percentage = (matches / total) * 100
+
+            # 80%+ match = duplicate
+            if match_percentage >= 80:
+                is_duplicate = True
+                duplicate_children.append({
+                    'name': child_name,
+                    'person_id': existing_child.pk
+                })
+                logger.info(
+                    f"  ❌ Child {child_name} is duplicate of {existing_child.name} "
+                    f"({match_percentage:.1f}% match)"
+                )
+                break
+
+        if not is_duplicate:
+            new_children.append(child_data)
+            logger.info(f"  ✅ Child {child_name} is NEW")
+
+    return new_children, duplicate_children
+
+
+def check_parent_and_children_duplicates(
+        extraction_result: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Intelligent duplicate detection with DNA fingerprint matching.
+
+    Handles:
+    - Parent + children uploads
+    - Parent-only uploads
+    - Child-only uploads (no parent)
 
     Rules:
-    1. Parent-to-Parent match: BOTH alleles must match (same person)
-    2. Parent-to-Child match: AT LEAST 1 allele must match (inheritance)
+    1. Parent-to-Parent: 80%+ exact allele match = same person
+    2. Child-to-Child: 80%+ exact allele match = duplicate
     3. Role matters: Father DNA ≠ Mother DNA
+
+    Args:
+        extraction_result: Dict with keys:
+            - parent: Optional parent data with 'name' and 'loci'
+            - parent_role: 'father', 'mother', or 'unknown'
+            - children: List of child dicts
+            - child: Single child dict (legacy format)
 
     Returns:
         {
             'parent_exists': bool,
             'existing_parent': Person | None,
             'new_children': List[Dict],
-            'duplicate_children': List[Dict],
+            'duplicate_children': List[Dict with 'name' and 'person_id'],
         }
     """
-    parent_data = extraction_result.get('parent') or extraction_result.get('father', {})
-    children_data = extraction_result.get('children', [])
-    parent_role = extraction_result.get('parent_role', 'unknown')
+    # Extract data
+    parent_data: Dict[str, Any] = extraction_result.get('parent') or extraction_result.get('father') or {}
+    parent_role: str = extraction_result.get('parent_role', 'unknown')
+    parent_loci: List[Dict[str, Any]] = parent_data.get('loci', []) if parent_data else []
+    parent_name: str = parent_data.get('name', 'Unknown') if parent_data else 'Unknown'
 
+    # Normalize children data (support both formats)
+    children_data: List[Dict[str, Any]] = extraction_result.get('children', [])
     if not children_data:
         single_child = extraction_result.get('child')
         if single_child and single_child.get('loci'):
             children_data = [single_child]
 
-    parent_loci = parent_data.get('loci', [])
-    parent_name = parent_data.get('name', 'Unknown')
-
-    result: Dict[str, Any] = {  # ✅ Fixed type hint
+    # Initialize result
+    result: Dict[str, Any] = {
         'parent_exists': False,
         'existing_parent': None,
         'new_children': [],
         'duplicate_children': [],
     }
 
-    # Build uploaded parent fingerprint
+    # Determine what we have
+    has_parent: bool = len(parent_loci) > 0
+    has_children: bool = len(children_data) > 0
+
+    # Case 1: Child-only upload (no parent)
+    if not has_parent and has_children:
+        logger.info(f"Child-only upload: checking {len(children_data)} children globally")
+        new_children, duplicate_children = _check_children_duplicates_global(children_data)
+        result['new_children'] = new_children
+        result['duplicate_children'] = duplicate_children
+        return result
+
+    # Case 2: No data at all
+    if not has_parent and not has_children:
+        logger.info("No DNA data for duplicate detection")
+        return result
+
+    # Case 3: Has parent - build fingerprint
     uploaded_fingerprint = build_fingerprint(parent_loci, CRITICAL_LOCI)
 
     if len(uploaded_fingerprint) < 4:
-        logger.info(f"Not enough loci for duplicate detection ({len(uploaded_fingerprint)}), treating as new")
+        logger.info(f"Not enough parent loci ({len(uploaded_fingerprint)}), treating as new")
         result['new_children'] = children_data
         return result
 
-    # ✅ STEP 1: Find matching parent
+    # Find matching parent
     existing_parent = _find_matching_parent(
         parent_name=parent_name,
         parent_role=parent_role,
@@ -64,11 +169,11 @@ def check_parent_and_children_duplicates(extraction_result: Dict[str, Any]) -> D
     )
 
     if existing_parent:
+        # Parent exists in database
         result['parent_exists'] = True
         result['existing_parent'] = existing_parent
 
-        # ✅ STEP 2: Check children
-        if len(children_data) > 0:
+        if has_children:
             new_children, duplicate_children = _check_children_duplicates(
                 existing_parent=existing_parent,
                 children_data=children_data
@@ -76,11 +181,18 @@ def check_parent_and_children_duplicates(extraction_result: Dict[str, Any]) -> D
             result['new_children'] = new_children
             result['duplicate_children'] = duplicate_children
         else:
-            logger.info("  No children in upload - parent loci enrichment")
-
+            logger.info("No children in upload - parent loci enrichment")
     else:
+        # New parent
         logger.info(f"✅ {parent_name} ({parent_role}) is NEW")
-        result['new_children'] = children_data
+
+        if has_children:
+            # Still check children globally
+            new_children, duplicate_children = _check_children_duplicates_global(children_data)
+            result['new_children'] = new_children
+            result['duplicate_children'] = duplicate_children
+        else:
+            result['new_children'] = children_data
 
     return result
 
@@ -132,11 +244,6 @@ def _find_matching_parent(
             continue
 
         match_percentage = (matches / total_compared) * 100
-
-        # logger.info(
-        #     f"  Comparing with {candidate.name}: "
-        #     f"{matches}/{total_compared} loci match exactly ({match_percentage:.1f}%)"
-        # )
 
         # Parent match: 80%+ exact match
         if total_compared >= 4 and match_percentage >= 80:

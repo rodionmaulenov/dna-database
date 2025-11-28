@@ -1,18 +1,21 @@
 import logging
+
+from django.db import transaction
 from django.shortcuts import get_object_or_404
-from ninja import Router
+from ninja import Router, Query
 from dna.models import Person, DNALocus
 from dna.schemas import UpdatePersonRequest, UpdatePersonResponse, UpdatePersonData, LocusData
-from dna.utils.file_helpers import delete_uploaded_files
-from dna.utils.response_helpers import error_response, success_response
+from dna.services import get_storage_service
+from dna.utils.file_helpers import delete_uploaded_files_with_storage
 
 logger = logging.getLogger(__name__)
 person_router = Router()
 
 
-
-
-@person_router.patch('update/{person_id}/', response={200: UpdatePersonResponse, 400: dict, 404: dict, 422: dict, 500: dict})
+@person_router.patch(
+    'update/{person_id}/',
+    response={200: UpdatePersonResponse, 400: dict, 404: dict, 422: dict, 500: dict}
+)
 def update_person(request, person_id: int, data: UpdatePersonRequest):
     """Update person name, role, and loci"""
     # ✅ ADD THIS AT THE TOP
@@ -103,57 +106,66 @@ def update_person(request, person_id: int, data: UpdatePersonRequest):
         return 500, {'success': False, 'errors': ['Failed to update person']}
 
 
-@person_router.delete('delete/{person_id}/', response={200: dict, 404: dict, 500: dict})
-def delete_person(request, person_id: int):
-    """Delete a person and all related data"""
-    try:
-        person = get_object_or_404(Person, id=person_id)
-        person_name = person.name
-        person_role = person.role
+@person_router.delete('delete-multiple/', response={200: dict, 400: dict, 500: dict})
+@transaction.atomic
+def delete_persons(request, person_ids_param: str = Query(..., alias='person_ids')):
+    """
+    Delete one or multiple PARENTS and all related data (children, files)
+    Only parent (father/mother) IDs allowed.
+    """
 
-        if person_role in ['father', 'mother']:
-            # Parent deletion
+    try:
+        if not person_ids_param:
+            return 400, {'error': 'No person_ids provided'}
+
+        try:
+            person_ids = [int(id.strip()) for id in person_ids_param.split(',') if id.strip()]
+        except ValueError:
+            return 400, {'error': 'Invalid person_ids format'}
+
+        if not person_ids:
+            return 400, {'error': 'No valid person_ids provided'}
+
+        # ========== CHECK FOR CHILDREN (REJECT) ==========
+        has_children = Person.objects.filter(
+            id__in=person_ids,
+            role='child'
+        ).exists()
+
+        if has_children:
+            return 400, {'error': 'Child deletion not allowed. Select only parents.'}
+
+        # ========== CHECK ALL EXIST ==========
+        existing_persons = Person.objects.filter(id__in=person_ids)
+        if existing_persons.count() != len(person_ids):
+            return 400, {'error': 'One or more persons not found'}
+
+        # ========== DELETE ==========
+        storage_service = get_storage_service()
+
+        for person in existing_persons:
+            # Get parent's files
             parent_files = person.uploaded_files.all()
+
+            # Find and delete children
             children = Person.objects.filter(
                 uploaded_files__in=parent_files,
                 role='child'
             ).distinct()
 
-            children_count = children.count()
-
-            # Delete children
             for child in children:
+                child_files = child.uploaded_files.all()
+                delete_uploaded_files_with_storage(child_files, storage_service)
                 child.delete()
 
-            # Delete files
-            file_count = delete_uploaded_files(parent_files)
+            # Delete parent's files
+            delete_uploaded_files_with_storage(parent_files, storage_service)
 
             # Delete parent
             person.delete()
 
-            return success_response(
-                200,
-                f'Deleted {person_name}, {children_count} children, and {file_count} files',
-                log_message=f"Deleted parent {person_name} + {children_count} children + {file_count} files"
-            )
-        else:
-            # Child deletion
-            child_files = person.uploaded_files.all()
-            file_count = delete_uploaded_files(child_files)
-            person.delete()
+        return 200, {'success': True}
 
-            return success_response(
-                200,
-                f'Deleted {person_name} and {file_count} files',
-                log_message=f"Deleted child {person_name} + {file_count} files"
-            )
-
-    except Person.DoesNotExist:
-        return error_response(404, 'Person not found', f"Person {person_id} not found")
     except Exception as e:
-        return error_response(
-            500,
-            'Failed to delete person',
-            log_message=f"Failed to delete person {person_id}: {e}",
-            exc_info=True
-        )
+        logger.error(f"Failed to delete persons: {e}", exc_info=True)
+        return 500, {'error': 'Failed to delete persons'}

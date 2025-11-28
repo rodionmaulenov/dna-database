@@ -1,6 +1,10 @@
-import {signalStoreFeature, withState, withMethods, withComputed, patchState} from '@ngrx/signals';
-import {computed, Signal} from '@angular/core';
+import {
+  patchState, signalStoreFeature, withComputed, withHooks, withMethods, withProps, withState
+} from '@ngrx/signals';
+import {computed, effect, Signal, untracked} from '@angular/core';
 import {TableRowData} from '../../models';
+import {MatTableDataSource} from '@angular/material/table';
+import {SelectionModel} from '@angular/cdk/collections';
 
 export function withLocalFilterFeature(
   tableData: Signal<TableRowData[]>,
@@ -12,10 +16,41 @@ export function withLocalFilterFeature(
   reload: () => void,
 ) {
   return signalStoreFeature(
+
     withState({
       localRoleFilter: 'parent' as 'parent' | 'child' | null
     }),
 
+    withProps(() => ({
+      _dataSource: new MatTableDataSource<TableRowData>([]),
+      selection: new SelectionModel<TableRowData>(true, []),
+    })),
+
+    withComputed((store) => {
+
+      const filteredData = computed(() => {
+        const data = tableData();
+        const roleFilter = store.localRoleFilter();
+
+        if (!roleFilter) {
+          return data;
+        } else if (roleFilter === 'parent') {
+          return data.filter(row => row.role === 'father' || row.role === 'mother');
+        } else if (roleFilter === 'child') {
+          return data.filter(row => row.role === 'child');
+        }
+        return data;
+      });
+
+      const dataSource = computed(() => store._dataSource);
+
+      return {
+        filteredData,
+        dataSource,
+      };
+    }),
+
+    // ========== METHODS ==========
     withMethods((store) => ({
 
       setRoleFilter: (role: 'parent' | 'child' | null) => {
@@ -23,7 +58,6 @@ export function withLocalFilterFeature(
         patchState(store, {localRoleFilter: role});
       },
 
-      // withLocalFilterFeature
       filterByPerson: (personId: number, personRole: string, personName: string) => {
         collapseExpandable();
         setLoading(true);
@@ -32,19 +66,17 @@ export function withLocalFilterFeature(
 
         const newRoleFilter = personRole === 'child' ? 'child' : 'parent';
 
-        // ✅ Set role AFTER data loaded (use setTimeout as simple solution)
         reload();
 
-        // Apply role when loading finishes
         const checkLoading = setInterval(() => {
           if (!isLoading()) {
-            patchState(store, { localRoleFilter: newRoleFilter });
+            patchState(store, {localRoleFilter: newRoleFilter});
             clearInterval(checkLoading);
           }
         }, 50);
       },
 
-      filterByMultiplePersons: (personIds: number[], personsRole: string, count: Number[]) => {
+      filterByMultiplePersons: (personIds: number[], personsRole: string, count: number) => {
         collapseExpandable();
         const idsString = personIds.join(',');
         const displayText = `${count} related persons`;
@@ -66,25 +98,21 @@ export function withLocalFilterFeature(
         setRemotePersonNames(null);
         patchState(store, {localRoleFilter: 'parent'});
         reload();
-      }
+      },
+
     })),
 
-    withComputed((store) => ({
-      // ✅ Filter tableData by local role only
-      filteredTableData: computed(() => {
-        const data = tableData();
-        const roleFilter = store.localRoleFilter();
+    withHooks({
+      onInit(store) {
+        effect(() => {
+          const filtered = store.filteredData();
 
-        if (!roleFilter) return data;
-
-        if (roleFilter === 'parent') {
-          return data.filter(row => row.role === 'father' || row.role === 'mother');
-        } else if (roleFilter === 'child') {
-          return data.filter(row => row.role === 'child');
-        }
-
-        return data;
-      }),
-    }))
+          untracked(() => {
+            store._dataSource.data = filtered;
+            store.selection.clear();
+          });
+        });
+      }
+    }),
   );
 }

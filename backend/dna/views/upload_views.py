@@ -24,25 +24,26 @@ def upload_file(request, file: File[NinjaUploadedFile]):
     try:
         logger.info(f"📤 Received file: {file.name}")
 
-        # Full pipeline: extract + save
         result = extract_and_save(file, file.name)
 
         if result.get('success') and result.get('saved_to_db'):
-            # Success - return full result dict
             return 200, result
         else:
-            # Failed - return error response
             errors = result.get('save_errors') or result.get('errors') or [result.get('error', 'Unknown error')]
+            links = result.get('links', [])  # ← ADD
+
             return 400, FileUploadResponse(
                 success=False,
-                errors=errors
+                errors=errors,
+                links=links  # ← ADD
             )
 
     except Exception as e:
         logger.error(f"❌ upload_file error: {e}", exc_info=True)
         return 400, FileUploadResponse(
             success=False,
-            errors=["Server error occurred"]
+            errors=["Server error occurred"],
+            links=[]  # ← ADD
         )
 
 
