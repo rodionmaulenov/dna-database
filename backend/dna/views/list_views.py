@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 list_router = Router()
 
 
+
 @list_router.get('list/', response=DNADataListResponse)
 def get_all_dna_data(request, page: int = 1, page_size: int = 20):
     logger.info(f"📋 Loading page {page}, size {page_size}")

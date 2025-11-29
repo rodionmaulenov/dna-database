@@ -78,6 +78,7 @@ export const UploadStore = signalStore(
       uploadAll: rxMethod<void>(
         pipe(
           tap(() => {
+            console.log('uploadAll started, files:', store.files().length);
             const filesToUpload = store.files().filter(f => f.status === 'idle');
 
             if (filesToUpload.length === 0) {
