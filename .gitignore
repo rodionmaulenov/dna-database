@@ -86,7 +86,6 @@ yarn.lock
 backend/media/uploads/*.pdf
 backend/media/uploads/*.jpg
 backend/media/uploads/*.png
-migrations/
 
 # ==========================================
 # Testing

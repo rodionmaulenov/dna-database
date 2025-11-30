@@ -1,8 +1,8 @@
-name: Deploy to EC2
+name: Build and Deploy
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 env:
@@ -52,6 +52,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy docker-compose to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "docker-compose.prod.yml"
+          target: "~/dna-database/"
+
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1
         with:
@@ -63,10 +75,12 @@ jobs:
             
             echo "📦 Starting deployment..."
             
+            mkdir -p ~/dna-database
             cd ~/dna-database
             
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
             
+            echo "📥 Pulling images..."
             docker pull ghcr.io/${{ github.repository_owner }}/dna-backend:latest
             docker pull ghcr.io/${{ github.repository_owner }}/dna-nginx:latest
             
@@ -76,6 +90,5 @@ jobs:
             
             echo "🧹 Cleaning old images..."
             docker image prune -af
-            docker builder prune -af
             
             echo "✅ Deployment complete!"
