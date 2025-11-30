@@ -3,6 +3,7 @@ Unified Storage Service for S3 and Local File Storage
 Handles file uploads, deletions, and URL generation
 """
 import os
+import glob
 import logging
 from typing import Optional
 
@@ -143,6 +144,23 @@ class StorageService:
         except Exception as e:
             logger.error(f"❌ Failed to generate URL for {file_path}: {e}")
             return file_path  # Fallback to path
+
+    @staticmethod
+    def cleanup_temp_uploads() -> None:
+        """
+        Remove all temporary files from uploads folder.
+        """
+        upload_dir = os.path.join(settings.MEDIA_ROOT, 'uploads')
+
+        if not os.path.exists(upload_dir):
+            return
+
+        for file_path in glob.glob(f'{upload_dir}/*'):
+            try:
+                os.remove(file_path)
+                logger.debug(f"🗑️ Removed temp file: {file_path}")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to remove {file_path}: {e}")
 
 
 # Singleton instance

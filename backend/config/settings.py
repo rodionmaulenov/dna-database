@@ -187,8 +187,7 @@ if USE_S3:
 
     # Placeholder MEDIA_URL (not actually used - boto3 generates URLs)
     MEDIA_URL = '/media-not-used/'
-    MEDIA_ROOT = None
-
+    MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 else:
     # Local Storage (Development)
     STORAGES = {

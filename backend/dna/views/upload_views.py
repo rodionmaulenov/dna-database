@@ -3,11 +3,13 @@ import logging
 from ninja import File, UploadedFile as NinjaUploadedFile, Router, Form
 
 from dna.schemas import FileUploadResponse, MatchResult
+from dna.services import get_storage_service
 from dna.services.extraction_service import extract_and_save
 from dna.services.matching_service import extract_and_match
 
 logger = logging.getLogger(__name__)
 upload_router = Router()
+storage_service = get_storage_service()
 
 
 @upload_router.post('file/', response={200: dict, 400: FileUploadResponse})
@@ -30,12 +32,12 @@ def upload_file(request, file: File[NinjaUploadedFile]):
             return 200, result
         else:
             errors = result.get('save_errors') or result.get('errors') or [result.get('error', 'Unknown error')]
-            links = result.get('links', [])  # ← ADD
+            links = result.get('links', [])
 
             return 400, FileUploadResponse(
                 success=False,
                 errors=errors,
-                links=links  # ← ADD
+                links=links
             )
 
     except Exception as e:
@@ -43,8 +45,10 @@ def upload_file(request, file: File[NinjaUploadedFile]):
         return 400, FileUploadResponse(
             success=False,
             errors=["Server error occurred"],
-            links=[]  # ← ADD
+            links=[]
         )
+    finally:
+        storage_service.cleanup_temp_uploads()
 
 
 # ============================================================

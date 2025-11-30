@@ -20,11 +20,14 @@ services:
       retries: 5
 
   backend:
-    image: ghcr.io/rodionmaulenov/dna-backend:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: dna-backend
     restart: unless-stopped
     command: >
-      bash -c "python manage.py migrate --noinput &&
+      bash -c "python manage.py makemigrations --noinput &&
+               python manage.py migrate --noinput &&
                python manage.py collectstatic --noinput &&
                gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 300"
     env_file:
@@ -41,7 +44,9 @@ services:
         condition: service_healthy
 
   nginx:
-    image: ghcr.io/rodionmaulenov/dna-nginx:latest
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
     container_name: dna-nginx
     restart: unless-stopped
     ports:
