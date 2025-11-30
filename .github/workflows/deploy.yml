@@ -70,25 +70,29 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
+          envs: GHCR_TOKEN,GITHUB_REPOSITORY_OWNER
           script: |
             set -e
-            
+
             echo "📦 Starting deployment..."
-            
+
             mkdir -p ~/dna-database
             cd ~/dna-database
-            
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
-            
+
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u $GITHUB_REPOSITORY_OWNER --password-stdin
+
             echo "📥 Pulling images..."
-            docker pull ghcr.io/${{ github.repository_owner }}/dna-backend:latest
-            docker pull ghcr.io/${{ github.repository_owner }}/dna-nginx:latest
-            
+            docker pull ghcr.io/$GITHUB_REPOSITORY_OWNER/dna-backend:latest
+            docker pull ghcr.io/$GITHUB_REPOSITORY_OWNER/dna-nginx:latest
+
             echo "🔄 Restarting containers..."
             docker-compose -f docker-compose.prod.yml down
             docker-compose -f docker-compose.prod.yml up -d
-            
+
             echo "🧹 Cleaning old images..."
             docker image prune -af
-            
+
             echo "✅ Deployment complete!"
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
