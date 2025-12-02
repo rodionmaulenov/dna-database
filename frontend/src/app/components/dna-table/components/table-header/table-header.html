@@ -45,7 +45,7 @@
     <mat-chip-listbox aria-label="Role filter"
                       [value]="filterByRole()"
                       (change)="setRoleFilter($event.value)">
-      <mat-chip-option value="parent">Parents</mat-chip-option>
+      <mat-chip-option value="parent" selected>Parents</mat-chip-option>
       <mat-chip-option value="child">Children</mat-chip-option>
     </mat-chip-listbox>
   </div>
