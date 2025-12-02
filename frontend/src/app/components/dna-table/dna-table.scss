@@ -48,11 +48,14 @@
   inset: 57px 0 0 0;
   background: rgba(255, 255, 255, 0.7);
   z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding-top: 20%;
   border-radius: 8px;
+
+  mat-spinner {
+    position: absolute;
+    top: 150px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
 }
 
 // ============================================
@@ -178,11 +181,11 @@ tr.detail-row {
   padding: 6px 12px;
   border: 1px solid #747775;
   border-radius: 16px;
-  background: #fff;
-  color: #d93025;
+  background: transparent;
   text-decoration: none;
+  color: rgba(0, 0, 0, 0.87);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 400;
   max-width: 125px;
   height: 32px;
   box-sizing: border-box;
