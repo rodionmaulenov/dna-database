@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 
 class LocusData(BaseModel):
-    id: int
+    id: Optional[int] = None
     locus_name: str
     allele_1: str
     allele_2: str
@@ -67,37 +67,8 @@ class DNADataListResponse(BaseModel):
     page_size: int = 20
 
 
-class UpdateLocusData(BaseModel):
-    id: int
-    locus_name: str
-    allele_1: str
-    allele_2: str
-
-
-class CreateLocusData(BaseModel):
-    locus_name: str
-    allele_1: str
-    allele_2: str
-
-
 class UpdatePersonRequest(BaseModel):
     name: Optional[str] = None
     role: Optional[str] = None
-    loci: Optional[List[UpdateLocusData]] = None
-    new_loci: Optional[List[CreateLocusData]] = None
-    deleted_loci_ids: Optional[List[int]] = None
+    loci: Optional[List[LocusData]] = None
 
-
-class UpdatePersonData(BaseModel):
-    id: int
-    name: str
-    role: str
-    loci_count: int
-    loci: List[LocusData]
-
-
-class UpdatePersonResponse(BaseModel):
-    success: bool
-    message: str
-    data: Optional[UpdatePersonData] = None
-    errors: Optional[List[str]] = None

@@ -2,9 +2,7 @@ import {patchState, signalStore, withFeature} from '@ngrx/signals';
 import {withLoadFeature} from './features/load.feature';
 import {withUploadFeature} from './features/upload.feature';
 import {withDeleteFeature} from './features/delete.feature';
-import {withLocusFeature} from './features/locus.feature';
 import {withDnaFormState} from './features/dna-form-state.feature';
-import {withDnaFormActions} from './features/dna-form-actions.feature';
 import {withExpansionFeature} from './features/expansion.feature';
 import {withTableActionsFeature} from './features/table-actions.feature';
 import {withLocalFilterFeature} from './features/local-filter.feature';
@@ -22,17 +20,7 @@ export const DnaTableStore = signalStore(
 
   withExpansionFeature(),
 
-  withLocusFeature(),
-
   withDnaFormState(),
-
-  withFeature((store) =>
-    withDnaFormActions(
-      store.addLocusToPersonById,
-      store.removeLocusFromPersonById,
-      store.setCurrentEditingPerson,
-    )
-  ),
 
   withFeature((store) =>
     withTableActionsFeature(
@@ -40,8 +28,6 @@ export const DnaTableStore = signalStore(
       store.setCurrentEditingPerson,
       store.toggleExpandedRow,
       store.isRowExpanded,
-      store.getDeletedLoci,
-      store.clearDeletedLoci,
       store.personsArrayForm,
       store.reload,
       store.collapseAll,

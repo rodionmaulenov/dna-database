@@ -1,0 +1,78 @@
+:host {
+  display: block;
+}
+
+.active-button  {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 20px 0;
+}
+
+.table-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  background: #fff;
+  border-bottom: 1px solid #c4c7c5;
+  transition: box-shadow 0.1s;
+
+  &.stuck {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    max-width: 1200px;
+    z-index: 100;
+  }
+}
+
+
+.stuck-spacer {
+  height: 0;
+
+  &.active {
+    height: 73px;
+  }
+}
+
+.table-header-title {
+  font-size: 18px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.87);
+}
+
+.table-header-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 16px;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  // First div - role filter, never wrap
+  > div:first-child {
+    flex-shrink: 0;
+
+    mat-chip-listbox {
+      flex-wrap: nowrap;
+    }
+  }
+
+  // Second div - active filter, can wrap to next line
+  > div:last-child {
+    flex-shrink: 1;
+  }
+}
+
+.table-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+mat-divider {
+  margin: 0;
+}

@@ -118,13 +118,7 @@ export interface DNADataListResponse {
 }
 
 export interface LociUpdate {
-  id: number;
-  locus_name: string;
-  allele_1: string;
-  allele_2: string;
-}
-
-export interface CreateLocusData {
+  id?: number;
   locus_name: string;
   allele_1: string;
   allele_2: string;
@@ -134,25 +128,6 @@ export interface UpdatePersonData {
   name?: string;
   role?: string;
   loci?: LociUpdate[];
-  new_loci?: CreateLocusData[];
-  deleted_loci_ids?: number[];
-}
-
-export interface UpdatePersonResponse {
-  success: boolean;
-  data?: {
-    id: number;
-    name: string;
-    role: string;
-    loci_count: number;
-    loci: Array<{
-      id: number;
-      locus_name: string;
-      allele_1: string;
-      allele_2: string;
-    }>;
-  };
-  errors?: string[];
 }
 
 // persons-array.schema.ts

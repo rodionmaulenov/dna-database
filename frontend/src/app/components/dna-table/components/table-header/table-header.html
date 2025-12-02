@@ -1,0 +1,68 @@
+<div class="active-button">
+  <div class="upload-trigger">
+    <button matButton="filled" (click)="openUploadSheet()">
+      <mat-icon>open_in_new</mat-icon>
+      Upload & Match
+    </button>
+  </div>
+</div>
+<mat-divider></mat-divider>
+<!-- Top Header -->
+<div #sentinel></div>
+<div class="table-header-top" [class.stuck]="isStuck()">
+  <span class="table-header-title">
+    @if (selectionHasValue()) {
+      {{ selectionLength() }} selected
+    } @else {
+      DNA persons
+    }
+  </span>
+
+  <div class="table-header-actions">
+    <!-- Save -->
+    <button mat-icon-button
+            [disabled]="!expandedRowId() || !store.hasChanges(getExpandedElement()!)"
+            (click)="store.updateRow(getExpandedElement()!)"
+            matTooltip="Save changes">
+      <mat-icon>save</mat-icon>
+    </button>
+
+    <!-- Delete -->
+    <button mat-icon-button
+            [disabled]="!selectionHasValue() || store.isDeleting()"
+            (click)="deleteSelected()"
+            matTooltip="Delete selected">
+      <mat-icon>delete</mat-icon>
+    </button>
+  </div>
+</div>
+<!-- Spacer when stuck -->
+<div class="stuck-spacer" [class.active]="isStuck()"></div>
+
+<!-- Bottom Header -->
+<div class="table-header-bottom">
+  <div>
+    <mat-chip-listbox aria-label="Role filter"
+                      [value]="filterByRole()"
+                      (change)="setRoleFilter($event.value)">
+      <mat-chip-option value="parent">Parents</mat-chip-option>
+      <mat-chip-option value="child">Children</mat-chip-option>
+    </mat-chip-listbox>
+  </div>
+
+  <!-- Active Filter Chip -->
+  <div>
+    <mat-chip-set>
+      @if (store.remotePersonIds()) {
+        <mat-chip (removed)="store.clearFilter()">
+          <mat-icon matChipAvatar>filter_alt</mat-icon>
+          {{ store.remotePersonNames() }}
+          <button matChipRemove>
+            <mat-icon>cancel</mat-icon>
+          </button>
+        </mat-chip>
+      }
+    </mat-chip-set>
+  </div>
+</div>
+<mat-divider></mat-divider>

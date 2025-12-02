@@ -16,36 +16,6 @@
           }
         </mat-error>
       </mat-form-field>
-
-      <button mat-icon-button
-              (click)="removeLocus(locus.index)"
-              [matTooltip]="'Remove ' + locusNameField().value()">
-        <mat-icon class="remove-locus-icon">delete_sweep</mat-icon>
-      </button>
     </div>
-  }
-
-  @if (isAddingLocus()) {
-    <div class="locus-item">
-      <mat-form-field class="locus-field" appearance="outline" subscriptSizing="dynamic">
-        <mat-label>Locus</mat-label>
-        <mat-select [(ngModel)]="selectLocusName"
-                    (selectionChange)="onLocusSelected($event.value)">
-          @for (locusName of getAvailableLociForRow(); track locusName) {
-            <mat-option [value]="locusName">{{ locusName }}</mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
-
-      <button mat-icon-button (click)="cancelAddLocus()" matTooltip="Cancel">
-        <mat-icon>close</mat-icon>
-      </button>
-    </div>
-  }
-
-  @if (!isAddingLocus()) {
-    <button mat-icon-button (click)="startAddingLocus()" matTooltip="Add locus">
-      <mat-icon>add</mat-icon>
-    </button>
   }
 </div>

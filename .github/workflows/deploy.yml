@@ -92,6 +92,12 @@ jobs:
             echo "🧹 Cleaning old images..."
             docker image prune -af
             
+            echo "🧹 Cleaning build cache..."
+            docker builder prune -af
+            
+            echo "🧹 Cleaning container logs..."
+            sudo sh -c 'truncate -s 0 /var/lib/docker/containers/*/*-json.log'
+            
             echo "✅ Deployment complete!"
         env:
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}

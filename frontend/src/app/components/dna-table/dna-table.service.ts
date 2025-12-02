@@ -2,7 +2,7 @@ import {inject, Injectable} from '@angular/core';
 import {HttpClient, HttpParams} from '@angular/common/http';
 import {Observable} from 'rxjs';
 import {ENVIRONMENT} from '../../config/environment.config';
-import {DeleteFileResponse, DNADataListResponse, UpdatePersonData, UpdatePersonResponse} from '../models';
+import {DeleteFileResponse, DNADataListResponse, UpdatePersonData} from '../models';
 
 @Injectable({
   providedIn: 'root'
@@ -27,8 +27,8 @@ export class DnaTableHttpService {
     }
   }
 
-  updatePerson(personId: number, data: UpdatePersonData): Observable<UpdatePersonResponse> {
-    return this.http.patch<UpdatePersonResponse>(`${this.apiUrl}/dna/person/update/${personId}/`, data);
+  updatePerson(personId: number, data: UpdatePersonData): Observable<any> {
+    return this.http.patch<any>(`${this.apiUrl}/dna/person/update/${personId}/`, data);
   }
 
   deletePersons(personIds: number[]): Observable<any> {

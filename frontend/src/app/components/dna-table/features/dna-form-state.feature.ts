@@ -3,6 +3,14 @@ import {FieldTree, form} from '@angular/forms/signals';
 import {signal} from '@angular/core';
 import {PersonsArrayFormData, personsArraySchema} from '../schemas/persons-array.schema';
 
+const ALL_LOCI = [
+  'D1S1656', 'D2S441', 'D2S1338', 'D3S1358', 'D5S818',
+  'D6S1043', 'D7S820', 'D8S1179', 'D10S1248', 'D12S391',
+  'D13S317', 'D16S539', 'D18S51', 'D19S433', 'D21S11',
+  'D22S1045', 'CSF1PO', 'FGA', 'TH01', 'TPOX', 'vWA',
+  'Penta D', 'Penta E',
+] as const;
+
 
 export function withDnaFormState() {
 
@@ -51,11 +59,22 @@ export function withDnaFormState() {
         },
 
         loadPersonLoci: (personId: number, loci: Array<{ id: number; locus_name: string; alleles: string }>): void => {
-
           personsSignal.update(data => ({
-            persons: data.persons.map(p =>
-              p.id === personId ? {...p, loci} : p
-            )
+            persons: data.persons.map(p => {
+              if (p.id !== personId) return p;
+
+              // ✅ Create all 23 loci, fill with existing data
+              const fullLoci = ALL_LOCI.map(locusName => {
+                const existing = loci.find(l => l.locus_name === locusName);
+                return {
+                  id: existing?.id || 0,
+                  locus_name: locusName,
+                  alleles: existing?.alleles || ''
+                };
+              });
+
+              return { ...p, loci: fullLoci };
+            })
           }));
         },
 
@@ -66,28 +85,6 @@ export function withDnaFormState() {
           personsSignal.update(data => ({
             persons: data.persons.map(p =>
               p.id === personId ? {...p, ...updates} : p
-            )
-          }));
-        },
-
-        addLocusToPersonById: (personId: number, locusName: string): void => {
-
-          personsSignal.update(data => ({
-            persons: data.persons.map(p =>
-              p.id === personId
-                ? {...p, loci: [...p.loci, { id: 0, locus_name: locusName, alleles: '' }]}
-                : p
-            )
-          }));
-        },
-
-        removeLocusFromPersonById: (personId: number, locusIndex: number): void => {
-
-          personsSignal.update(data => ({
-            persons: data.persons.map(p =>
-              p.id === personId
-                ? {...p, loci: p.loci.filter((_, i) => i !== locusIndex)}
-                : p
             )
           }));
         },
@@ -123,25 +120,6 @@ export function withDnaFormState() {
           }
           return [];
         },
-
-
-        getLocusAtIndex: (personId: number, index: number): { id: number; locus_name: string; alleles: string } | null => {
-          const form = personsArrayForm!();
-          const currentValue = form.value();
-          const person = currentValue.persons.find(p => p.id === personId);
-          return person?.loci[index] || null;
-        },
-
-        getPersonLociFieldNames: (personId: number): string[] => {
-          const formInstance = personsArrayForm!();
-          const currentValue = formInstance.value();
-
-          const person = currentValue.persons.find(p => p.id === personId);
-          if (!person) return [];
-
-          return person.loci.map(l => l.locus_name).filter(Boolean);
-        },
-
       };
     })
   );

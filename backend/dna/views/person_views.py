@@ -4,7 +4,7 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 from ninja import Router, Query
 from dna.models import Person, DNALocus
-from dna.schemas import UpdatePersonRequest, UpdatePersonResponse, UpdatePersonData, LocusData
+from dna.schemas import UpdatePersonRequest
 from dna.services import get_storage_service
 from dna.utils.file_helpers import delete_uploaded_files_with_storage
 
@@ -14,17 +14,15 @@ person_router = Router()
 
 @person_router.patch(
     'update/{person_id}/',
-    response={200: UpdatePersonResponse, 400: dict, 404: dict, 422: dict, 500: dict}
+    response={200: dict, 400: dict, 404: dict, 422: dict, 500: dict}
 )
 def update_person(request, person_id: int, data: UpdatePersonRequest):
     """Update person name, role, and loci"""
-    # ✅ ADD THIS AT THE TOP
     logger.info(f"📝 Updating person {person_id}")
     logger.info(f"   Name: {data.name}")
     logger.info(f"   Role: {data.role}")
-    logger.info(f"   Loci updates: {len(data.loci) if data.loci else 0}")
-    logger.info(f"   New loci: {len(data.new_loci) if data.new_loci else 0}")
-    logger.info(f"   Deleted loci IDs: {data.deleted_loci_ids}")
+    logger.info(f"   Loci: {len(data.loci) if data.loci else 0}")
+
     try:
         person = get_object_or_404(Person, id=person_id)
         updated_fields = []
@@ -41,65 +39,40 @@ def update_person(request, person_id: int, data: UpdatePersonRequest):
             person.role = data.role
             updated_fields.append('role')
 
-        # Update existing loci
+        # ✅ Update/Create loci by locus_name
         if data.loci is not None:
             for locus_data in data.loci:
-                try:
-                    locus = DNALocus.objects.get(id=locus_data.id, person=person)
-                    locus.allele_1 = locus_data.allele_1
-                    locus.allele_2 = locus_data.allele_2
-                    locus.save()
-                    if 'loci' not in updated_fields:
-                        updated_fields.append('loci')
-                except DNALocus.DoesNotExist:
-                    return 404, {'success': False, 'errors': [f'Locus {locus_data.id} not found']}
+                # Skip empty loci
+                if not locus_data.allele_1 and not locus_data.allele_2:
+                    # ✅ Optionally delete existing empty locus
+                    DNALocus.objects.filter(
+                        person=person,
+                        locus_name=locus_data.locus_name
+                    ).delete()
+                    continue
 
-        # Create new loci
-        if data.new_loci is not None and len(data.new_loci) > 0:
-            for new_locus in data.new_loci:
-                DNALocus.objects.create(
+                # ✅ Update or create by locus_name
+                DNALocus.objects.update_or_create(
                     person=person,
-                    locus_name=new_locus.locus_name,
-                    allele_1=new_locus.allele_1,
-                    allele_2=new_locus.allele_2
+                    locus_name=locus_data.locus_name,
+                    defaults={
+                        'allele_1': locus_data.allele_1,
+                        'allele_2': locus_data.allele_2
+                    }
                 )
-            updated_fields.append('new_loci')
-            person.loci_count = person.loci.count()
 
-        # Delete loci
-        if data.deleted_loci_ids is not None and len(data.deleted_loci_ids) > 0:
-            deleted_count = DNALocus.objects.filter(id__in=data.deleted_loci_ids, person=person).delete()[0]
-            if deleted_count > 0:
-                updated_fields.append('deleted_loci')
-                person.loci_count = person.loci.count()
+                if 'loci' not in updated_fields:
+                    updated_fields.append('loci')
+
+            # Update loci count
+            person.loci_count = person.loci.count()
 
         if not updated_fields:
             return 400, {'success': False, 'errors': ['No fields to update']}
 
         person.save()
 
-        # Build response with updated loci
-        loci_data = [
-            LocusData(
-                id=locus.id,
-                locus_name=locus.locus_name,
-                allele_1=locus.allele_1 or '',
-                allele_2=locus.allele_2 or ''
-            )
-            for locus in person.loci.all().order_by('id')
-        ]
-
-        return 200, UpdatePersonResponse(
-            success=True,
-            message=f'Updated {", ".join(set(updated_fields))}',
-            data=UpdatePersonData(
-                id=person.pk,
-                name=person.name,
-                role=person.role,
-                loci_count=person.loci.count(),
-                loci=loci_data
-            )
-        )
+        return 200, {'success': True}
 
     except Exception as e:
         logger.error(f"Update person error: {e}", exc_info=True)

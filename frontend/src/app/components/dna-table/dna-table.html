@@ -1,33 +1,10 @@
 <div class="table-card">
 
-  <!-- Header -->
-  <div class="table-card-header">
-  <span class="table-card-title">
-    @if (selection.hasValue()) {
-      {{ selection.selected.length }} selected
-    } @else {
-      DNA Persons
-    }
-  </span>
-
-    <div class="table-card-actions">
-      <!-- Save -->
-      <button mat-icon-button
-              [disabled]="!expandedRowId() || !store.hasChanges(getExpandedElement()!)"
-              (click)="store.updateRow(getExpandedElement()!)"
-              matTooltip="Save changes">
-        <mat-icon>save</mat-icon>
-      </button>
-
-      <!-- Delete -->
-      <button mat-icon-button
-              [disabled]="!selection.hasValue() || store.isDeleting()"
-              (click)="deleteSelected()"
-              matTooltip="Delete selected">
-        <mat-icon>delete</mat-icon>
-      </button>
-    </div>
-  </div>
+  <app-table-header [selectionLength]="selection.selected.length"
+                    [selectionHasValue]="selection.hasValue()"
+                    [selectedNames]="selectedNames"
+                    [selectedIds]="selectedIds">
+  </app-table-header>
 
   <!-- Body -->
   <div class="table-card-body">
@@ -38,19 +15,11 @@
       </div>
     }
 
-    <div class="table-scroll-container">
       <table mat-table
              [dataSource]="dataSource()"
              [trackBy]="trackByPersonId"
              multiTemplateDataRows
              tabindex="0">
-
-        <ng-container matColumnDef="number">
-          <th mat-header-cell *matHeaderCellDef>No.</th>
-          <td mat-cell *matCellDef="let i = dataIndex">
-            {{ pageIndex() * pageSize() + i + 1 }}
-          </td>
-        </ng-container>
 
         <ng-container matColumnDef="select">
           <th mat-header-cell *matHeaderCellDef>
@@ -83,27 +52,23 @@
         </ng-container>
 
         <ng-container matColumnDef="name">
-          <th mat-header-cell *matHeaderCellDef>Full name</th>
-          <td mat-cell *matCellDef="let row">{{ row.name }}</td>
+          <th mat-header-cell *matHeaderCellDef>
+          </th>
+          <td mat-cell *matCellDef="let row">{{ row.name.split(' ').slice(0, 2).join(' ') }}</td>
         </ng-container>
 
         <ng-container matColumnDef="role">
-          <th mat-header-cell *matHeaderCellDef>Role</th>
+          <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let row">{{ row.role }}</td>
         </ng-container>
 
         <ng-container matColumnDef="loci_count">
-          <th mat-header-cell *matHeaderCellDef>Locus Count</th>
+          <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let row">{{ row.loci_count }}</td>
         </ng-container>
 
         <ng-container matColumnDef="related_person">
-          <th mat-header-cell *matHeaderCellDef>
-            <div class="header-icon-alignment">
-              <span>Related Person</span>
-              <mat-icon class="header-icon-size">filter_alt</mat-icon>
-            </div>
-          </th>
+          <th mat-header-cell *matHeaderCellDef></th>
           <td mat-cell *matCellDef="let row">
             @if (row.relatedPersons && row.relatedPersons.length > 1) {
               <span (click)="store.filterByMultiplePersons(
@@ -121,43 +86,35 @@
                       row.relatedPersonName
                       )"
                     class="person-link">
-                {{ row.relatedPersonName }}
+                {{ row.relatedPersonName.split(' ').slice(0, 2).join(' ') }}
               </span>
-            } @else {
-              <span>-</span>
             }
           </td>
         </ng-container>
 
         <ng-container matColumnDef="file">
-          <th mat-header-cell *matHeaderCellDef>
-            <div class="header-icon-alignment">
-              <span>File(s)</span>
-              <mat-icon class="header-icon-size">link</mat-icon>
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let row">
+            <div class="file-chips">
+              @for (file of getFiles(row); track file.id; let idx = $index) {
+                <div class="file-chip-wrapper">
+                  <a [href]="file.file"
+                     target="_blank"
+                     class="file-chip"
+                     [matTooltip]="'Uploaded: ' + (file.uploaded_at | date:'yyyy-MM-dd HH:mm')">
+                    <mat-icon class="file-icon">picture_as_pdf</mat-icon>
+                    <span class="file-name">{{ getFileName(file.file) }}</span>
+                  </a>
+
+                  <!-- ✅ Close button -->
+                  <button class="file-delete-btn"
+                          (click)="confirmDeleteFile(row, file, idx); $event.stopPropagation()"
+                          [disabled]="store.deletingFileId() === file.id">
+                    <mat-icon>close</mat-icon>
+                  </button>
+                </div>
+              }
             </div>
-          </th>
-          <td mat-cell *matCellDef="let row" (click)="$event.stopPropagation()">
-            @if (row.files && row.files.length > 0) {
-              <div class="file-chips">
-                @for (file of getFiles(row); track file.id; let idx = $index) {
-                  <div class="file-chip-wrapper">
-                    <a [href]="file.file"
-                       target="_blank"
-                       class="file-chip"
-                       [matTooltip]="'Uploaded: ' + (file.uploaded_at | date:'yyyy-MM-dd HH:mm')">
-                      {{ idx + 1 }}
-                    </a>
-                    <button class="file-delete-btn"
-                            (click)="confirmDeleteFile(row, file, idx)"
-                            [disabled]="store.deletingFileId() === file.id">
-                      <mat-icon>close</mat-icon>
-                    </button>
-                  </div>
-                }
-              </div>
-            } @else {
-              <span>-</span>
-            }
           </td>
         </ng-container>
 
@@ -165,33 +122,38 @@
           <td mat-cell *matCellDef="let row" [attr.colspan]="columnsToDisplay.length">
             <div class="element-detail-wrapper"
                  [class.element-detail-wrapper-expanded]="expandedRowId() === row.personId">
-              @if (expandedRowId() === row.personId) {
+              @defer (when expandedRowId() === row.personId) {
                 <app-expandable-row [element]="row"></app-expandable-row>
               }
             </div>
           </td>
         </ng-container>
 
-        <tr mat-header-row *matHeaderRowDef="columnsToDisplay; sticky: true"></tr>
+        <ng-container matColumnDef="paginator-header">
+          <th mat-header-cell *matHeaderCellDef [attr.colspan]="2">
+            <mat-paginator
+              [length]="total()"
+              [pageSize]="pageSize()"
+              [pageIndex]="pageIndex()"
+              (page)="loadPage($event.pageIndex)"
+              [hidePageSize]="true"
+              aria-label="Select page">
+            </mat-paginator>
+          </th>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="headerColumns"></tr>
         <tr mat-row
             *matRowDef="let row; columns: columnsToDisplay;"
             class="element-row"
+            [attr.data-person-id]="row.personId"
             [class.expanded-row]="expandedRowId() === row.personId"
-            (click)="selection.toggle(row)">
+            [class.selected-row]="selection.isSelected(row)">
         </tr>
         <tr mat-row *matRowDef="let row; columns: ['expandedDetail']" class="detail-row"></tr>
       </table>
     </div>
 
-    <mat-paginator
-      [length]="total()"
-      [pageSize]="pageSize()"
-      [pageIndex]="pageIndex()"
-      (page)="loadPage($event.pageIndex)"
-      aria-label="Select page">
-    </mat-paginator>
-
-  </div>
 </div>
 
 

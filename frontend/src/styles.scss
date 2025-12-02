@@ -1,73 +1,61 @@
+// Include theming for Angular Material with `mat.theme()`.
+// This Sass mixin will define CSS variables that are used for styling Angular Material
+// components according to the Material 3 design spec.
+// Learn more about theming and how to use it for your application's
+// custom components at https://material.angular.dev/guide/theming
 @use 'modern-normalize/modern-normalize.css';
 @use '@angular/material' as mat;
 
 html {
   @include mat.theme((
     color: (
-      primary: mat.$cyan-palette,
-      tertiary: mat.$orange-palette,
+      primary: mat.$azure-palette,
+      tertiary: mat.$blue-palette,
     ),
     typography: Roboto,
     density: 0,
   ));
-}
 
-:root {
-  @include mat.form-field-overrides((
-    filled-container-color: transparent,
-    state-layer-color: transparent,
-    filled-active-indicator-color: transparent,
-    filled-hover-active-indicator-color: transparent,
-    container-text-size: 14px,
+  @include mat.table-overrides((
+    row-item-outline-color: #c4c7c5,
+    background-color: #fff,
   ));
 
-  @include mat.select-overrides((
-    trigger-text-size: 14px,
+  @include mat.chips-overrides((
+    elevated-selected-container-color: #c2e7ff,
+    selected-focus-state-layer-color: transparent,
   ));
-
-  @include mat.list-overrides((
-    list-item-disabled-state-layer-color: transparent,
-    list-item-hover-state-layer-color: transparent,
-    active-indicator-shape: 16px,
-  ));
-}
-
-// ⭐ Global reset
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-// ⭐ Allow page to scroll vertically
-html, body {
-  margin: 0;
-  padding: 0;
-  min-height: 100vh; // ⭐ Changed back to min-height
-  overflow-x: hidden; // ⭐ Prevent horizontal page scroll
-  overflow-y: auto; // ⭐ Allow vertical page scroll
+  .mat-mdc-standard-chip:active {
+    --mat-chip-label-text-color: #0b57d0;
+  }
 }
 
 body {
+  // Default the application to a light color theme. This can be changed to
+  // `dark` to enable the dark color theme, or to `light dark` to defer to the
+  // user's system settings.
   color-scheme: light;
-  background-color: var(--mat-sys-surface);
+
+  // Set a default background, font and text colors for the application using
+  // Angular Material's system-level CSS variables. Learn more about these
+  // variables at https://material.angular.dev/guide/system-variables
+  //background-color: var(--mat-sys-surface);
+  background-color: #fff;
   color: var(--mat-sys-on-surface);
   font: var(--mat-sys-body-medium);
+
+  // Reset the user agent margin.
+  margin: 0;
+}
+
+html, body {
+  height: 100%;
+  scrollbar-gutter: stable;
+  scroll-behavior: smooth;
+  //overflow-y: hidden;
+}
+
+body {
+  margin: 0;
   font-family: Roboto, "Helvetica Neue", sans-serif;
-  box-sizing: border-box;
 }
-
-// ⭐ Material components
-mat-card, mat-form-field, mat-table {
-  box-sizing: border-box;
-}
-
-// ⭐ Root component
-app-root {
-  display: block;
-  min-height: 100vh;
-  width: 100%;
-}
-
-
-
