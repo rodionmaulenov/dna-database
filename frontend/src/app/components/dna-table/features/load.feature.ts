@@ -13,8 +13,8 @@ export function withLoadFeature() {
     withEntities(dnaEntityConfig),
 
     withState({
-      backendPageIndex: 0,
-      backendTotal: 0,
+      pageIndex: 0,
+      pageSize: 20,
       total: 0,
       isLoading: true,
       error: null,
@@ -23,32 +23,21 @@ export function withLoadFeature() {
     withMethods((store) => {
       const service = inject(DnaTableHttpService);
 
-      const loadData = rxMethod<{ page: number; append: boolean }>(
+      const loadData = rxMethod<number>(
         pipe(
-          tap(() => {
-            patchState(store, { isLoading: true, error: null });
+          tap((pageIndex) => {
+            patchState(store, { isLoading: true, error: null, pageIndex });
           }),
-          switchMap(({ page, append }) => {
-            return service.loadTableData(page + 1, 20).pipe(
+          switchMap((pageIndex) => {
+            const djangoPage = pageIndex + 1;  // Django is 1-indexed
+
+            return service.loadTableData(djangoPage, store.pageSize()).pipe(
               tap(response => {
-                if (append) {
-                  // ✅ Append to existing entities
-                  const existing = store.dnaRecordsEntities();
-                  const newIds = response.data.map((r: DnaRecord) => r.id);
-                  const filtered = existing.filter(e => !newIds.includes(e.id));
-                  patchState(
-                    store,
-                    setAllEntities([...filtered, ...response.data], {collection: 'dnaRecords'}),
-                    { backendPageIndex: page, backendTotal: response.total, isLoading: false }
-                  );
-                } else {
-                  // ✅ Replace entities
-                  patchState(
-                    store,
-                    setAllEntities(response.data, {collection: 'dnaRecords'}),
-                    { backendPageIndex: page, backendTotal: response.total, isLoading: false }
-                  );
-                }
+                patchState(
+                  store,
+                  setAllEntities(response.data, { collection: 'dnaRecords' }),
+                  { total: response.total, isLoading: false }
+                );
               }),
               catchError(error => {
                 patchState(store, { isLoading: false, error: error.message });
@@ -60,11 +49,15 @@ export function withLoadFeature() {
       );
 
       return {
-        loadInitial: () => loadData({ page: 0, append: false }),
-        loadNextBackendPage: () => loadData({ page: store.backendPageIndex() + 1, append: true }),
-        reload: () => loadData({ page: 0, append: false }),
+        loadPage: (pageIndex: number) => loadData(pageIndex),
+        reload: () => loadData(store.pageIndex()),
+        loadInitial: () => loadData(0),
       };
     }),
+
+    withComputed((store) => ({
+      totalPages: computed(() => Math.ceil(store.total() / store.pageSize())),
+    })),
 
     withHooks({
       onInit(store) {
@@ -72,17 +65,17 @@ export function withLoadFeature() {
       }
     }),
 
+    // Transform entities to table rows
     withComputed((store) => {
       const transformToTableData = (records: DnaRecord[]): TableRowData[] => {
         const tableData: TableRowData[] = [];
 
         records.forEach(record => {
-          // Parent row
           if (record.parent) {
             const relatedPersons = record.children?.length
-              ? record.children.map(c => ({id: c.id, name: c.name, role: c.role}))
+              ? record.children.map(c => ({ id: c.id, name: c.name, role: c.role }))
               : record.child
-                ? [{id: record.child.id, name: record.child.name, role: record.child.role}]
+                ? [{ id: record.child.id, name: record.child.name, role: record.child.role }]
                 : null;
 
             tableData.push({
@@ -101,7 +94,6 @@ export function withLoadFeature() {
             });
           }
 
-          // Single child
           if (record.child) {
             tableData.push({
               id: record.id,
@@ -119,7 +111,6 @@ export function withLoadFeature() {
             });
           }
 
-          // ✅ ADD: Multiple children (with or without parent)
           if (record.children?.length) {
             record.children.forEach(child => {
               tableData.push({
@@ -144,16 +135,8 @@ export function withLoadFeature() {
       };
 
       return {
-        tableData: computed(() => {
-          const entities = store.dnaRecordsEntities();
-          return transformToTableData(entities);
-        }),
-
-        hasMoreBackendData: computed(() => {
-          const loaded = store.dnaRecordsEntities().length;
-          return loaded < store.backendTotal();
-        }),
-
+        tableData: computed(() => transformToTableData(store.dnaRecordsEntities())),
+        hasRecords: computed(() => store.dnaRecordsEntities().length > 0),
       };
     })
   );

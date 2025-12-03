@@ -214,11 +214,14 @@ tr.detail-row {
   max-width: 125px;
   height: 32px;
   box-sizing: border-box;
+  overflow: hidden;
 
   .file-icon {
     font-size: 18px;
     width: 18px;
     height: 18px;
+    min-width: 18px;
+    flex-shrink: 0;
     color: #d93025;
   }
 
@@ -226,6 +229,8 @@ tr.detail-row {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    min-width: 0;
+    flex: 1;
   }
 }
 

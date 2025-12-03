@@ -1,144 +1,103 @@
 <div class="upload-sheet-container">
 
-  <!-- File input & components button -->
+  <!-- Controls -->
   <div class="upload-controls">
-    <input
-      #fileInput
-      type="file"
-      (change)="onFileSelect($event)"
-      accept=".pdf"
-      [multiple]="store.selectedRole() === 'save'"
-      hidden>
+    <div class="upload-actions">
+      <input #fileInput type="file" (change)="onFileSelect($event)" accept=".pdf"
+             [multiple]="store.selectedRole() === 'save'" hidden>
 
-    <button matMiniFab (click)="fileInput.click()" [disabled]="store.isUploading()">
-      <mat-icon>attach_file</mat-icon>
-    </button>
+      <button matMiniFab (click)="fileInput.click()" [disabled]="store.isUploading()">
+        <mat-icon>attach_file</mat-icon>
+      </button>
 
-    <button
-      matMiniFab
-      (click)="upload()"
-      [disabled]="!store.hasFilesToUpload() || store.isUploading()">
-      <mat-icon>{{ store.selectedRole() === 'save' ? 'upload' : 'search' }}</mat-icon>
-    </button>
+      <button matMiniFab (click)="upload()" [disabled]="!store.hasFilesToUpload() || store.isUploading()">
+        <mat-icon>{{ store.selectedRole() === 'save' ? 'upload' : 'search' }}</mat-icon>
+      </button>
 
-    <button mat-button (click)="clearAll()" [disabled]="store.files().length === 0 || store.isUploading()">
-      <mat-icon>clear_all</mat-icon>
-      Clear All
-    </button>
+      <button matMiniFab (click)="clearAll()" [disabled]="store.files().length === 0 || store.isUploading()">
+        <mat-icon>clear_all</mat-icon>
+      </button>
+    </div>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Mode</mat-label>
+      <mat-select [value]="store.selectedRole()" (selectionChange)="store.setRole($event.value)">
+        <mat-option value="save">
+          <mat-icon>save</mat-icon>
+          Save
+        </mat-option>
+        <mat-option value="parent">
+          <mat-icon>child_care</mat-icon>
+          Find child
+        </mat-option>
+        <mat-option value="child">
+          <mat-icon>people</mat-icon>
+          Find parent
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
   </div>
 
-  <!-- Dropdown selector -->
-  <mat-form-field appearance="outline" subscriptSizing="dynamic" (click)="$event.stopPropagation()">
-    <mat-label>Mode</mat-label>
-    <mat-select [value]="store.selectedRole()" (selectionChange)="store.setRole($event.value)">
-      <mat-option value="save" class="select-option">
-        <mat-icon class="select-option-icon">save</mat-icon>
-        Save to Database
-      </mat-option>
-      <mat-option value="parent" class="select-option">
-        <mat-icon class="select-option-icon">child_care</mat-icon>
-        Find Child
-      </mat-option>
-      <mat-option value="child" class="select-option">
-        <mat-icon class="select-option-icon">people</mat-icon>
-        Find Parent
-      </mat-option>
-    </mat-select>
-  </mat-form-field>
-
-  <!-- ⭐ Files list with dividers -->
+  <!-- Files -->
   @if (store.files().length > 0) {
-    <mat-nav-list class="files-list">
-      @for (fileWithStatus of store.files(); track $index; let isLast = $last) {
-        <mat-list-item [disableRipple]="true">
-          <mat-icon matListItemIcon>description</mat-icon>
+    <div class="files-list">
+      @for (file of store.files(); track $index) {
+        <div class="file-row">
+          <div class="file-info">
+            <mat-icon class="pdf-icon">picture_as_pdf</mat-icon>
+            <span class="file-name">{{ file.file.name }}</span>
 
-          <h3 matListItemTitle>{{ fileWithStatus.file.name }}</h3>
-
-          <p matListItemLine>
-            @if (fileWithStatus.status === 'idle') {
-              Ready to {{ store.selectedRole() === 'save' ? 'upload' : 'search' }}
-            }
-            @if (fileWithStatus.status === 'uploading') {
-              <span class="loading-text">
-                {{ store.selectedRole() === 'save' ? 'Uploading' : 'Searching' }}
-                <span class="loading-dots"></span>
-              </span>
-            }
-            @if (fileWithStatus.status === 'success') {
-              @if (store.selectedRole() === 'save') {
-                <span style="color: darkgreen">Uploaded successfully</span>
-              } @else {
-                <span>
-                  Found {{ fileWithStatus.response?.top_matches?.length || 0 }} matches
-                </span>
+            <div class="file-action">
+              @switch (file.status) {
+                @case ('idle') {
+                  <button mat-icon-button (click)="removeFile($index)">
+                    <span class="material-symbols-outlined">close</span>
+                  </button>
+                }
+                @case ('uploading') {
+                  <mat-spinner diameter="24"></mat-spinner>
+                }
+                @case ('success') {
+                  <span class="success-icon material-symbols-outlined">task_alt</span>
+                }
+                @case ('error') {
+                  <span class="error-icon material-symbols-outlined">error</span>
+                }
               }
-            }
-            @if (fileWithStatus.status === 'error') {
-              <span style="color: darkred">Upload failed</span>
-            }
-          </p>
-
-          <div matListItemMeta>
-            @if (fileWithStatus.status === 'uploading') {
-              <mat-spinner diameter="27"></mat-spinner>
-            }
-            @if (fileWithStatus.status === 'success') {
-              <mat-icon style="color: darkgreen">check_circle</mat-icon>
-            }
-            @if (fileWithStatus.status === 'error') {
-              <mat-icon style="color: darkred">error</mat-icon>
-            }
-            @if (fileWithStatus.status === 'idle') {
-              <mat-icon style="cursor: pointer" (click)="removeFile($index)">delete_sweep</mat-icon>
-            }
+            </div>
           </div>
-        </mat-list-item>
 
-        <!-- ✅ ERROR MESSAGE IN SEPARATE ROW -->
-        @if (fileWithStatus.status === 'error') {
-          <div class="error-message-container">
-            <span>{{ fileWithStatus.response?.errors?.[0] }}</span>
-            @for (link of fileWithStatus.response?.links; track link.person_id) {
-              <a class="person-error-link" (click)="viewPerson(link.person_id, link.role, link.name)">
-                [{{ link.role }}]
-              </a>
-            }
-          </div>
-        }
-
-        <!-- Show matches if success and mode is not 'save' -->
-        @if (fileWithStatus.status === 'success' &&
-        store.selectedRole() !== 'save' &&
-        fileWithStatus.response?.top_matches?.length) {
-
-          @for (match of fileWithStatus.response!.top_matches!.slice(0, 3); track match.person_id) {
-            <mat-list-item [disableRipple]="true">
-              <mat-icon matListItemIcon>person</mat-icon>
-              <h4 matListItemTitle (click)="viewMatch(match)" class="person-link-upload">{{ match.name }}</h4>
-
-              <p matListItemLine>
-                {{ match.role }} {{ match.matching_loci }}/{{ match.total_loci }} loci
-              </p>
-
-              <div matListItemMeta>
-                <mat-chip>
-                  {{ match.match_percentage }}%
-                </mat-chip>
+          @if (file.status === 'error') {
+            @let errorMsg = file.response?.errors?.[0];
+            @if (errorMsg) {
+              <div class="error-message">
+                {{ errorMsg }}
+                @for (link of file.response?.links; track link.person_id) {
+                  <a (click)="viewPerson(link.person_id, link.role, link.name)">[{{ link.role }}]</a>
+                }
               </div>
-            </mat-list-item>
+            }
           }
-        }
 
-        @if (!isLast) {
-          <mat-divider></mat-divider>
-        }
+          @if (file.status === 'success' && file.response?.top_matches?.length && store.selectedRole() !== 'save') {
+            <mat-nav-list class="matches">
+              @for (match of file.response!.top_matches!.slice(0, 3); track match.person_id) {
+                <mat-list-item (click)="viewMatch(match)">
+                  <mat-chip matListItemIcon class="match-chip">{{ match.match_percentage }}%</mat-chip>
+                  <span matListItemTitle>{{ match.name }}</span>
+                  <span matListItemLine>{{ match.matching_loci }}/{{ match.total_loci }} loci</span>
+                </mat-list-item>
+              }
+            </mat-nav-list>
+          }
+        </div>
       }
-    </mat-nav-list>
+    </div>
   } @else {
     <div class="empty-state">
       <mat-icon>cloud_upload</mat-icon>
       <p>No files selected</p>
     </div>
   }
+
 </div>

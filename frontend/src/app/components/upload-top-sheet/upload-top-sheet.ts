@@ -18,7 +18,7 @@ import {FormsModule} from '@angular/forms';
   selector: 'app-components-top-sheet',
   imports: [
     MatButtonModule, MatListModule, MatDividerModule, MatProgressSpinnerModule, MatIconModule, MatFormFieldModule,
-    MatSelectModule, MatChip, MatInputModule, FormsModule
+    MatSelectModule, MatChip, MatInputModule, FormsModule,
   ],
   standalone: true,
   templateUrl: './upload-top-sheet.html',

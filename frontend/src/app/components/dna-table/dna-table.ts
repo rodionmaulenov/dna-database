@@ -47,9 +47,15 @@ export class DnaTable {
   dataSource = this.store.dataSource;
   selection = this.store.selection;
   total = this.store.total;
-  selectedNames = this.selection.selected.map(e => e.name);
-  selectedIds = this.selection.selected.map(e => e.personId);
   expandedRowId = this.store.expandedRowId;
+
+  get selectedIds(): number[] {
+    return this.selection.selected.map(e => e.personId);
+  }
+
+  get selectedNames(): string[] {
+    return this.selection.selected.map(e => e.name);
+  }
 
   trackByPersonId(_: number, row: TableRowData): number {
     return row.personId;

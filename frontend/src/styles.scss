@@ -37,6 +37,20 @@ html {
     label-text-color: #1f1f1f,
     with-icon-icon-color: #2962ff,
   ));
+
+  @include mat.bottom-sheet-overrides((
+    container-background-color: #e9eef6,
+  ));
+
+  .components-top-sheet {
+    .mat-bottom-sheet-container {
+      max-width: 512px;
+      min-height: 380px;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+  }
+
 }
 
 body {

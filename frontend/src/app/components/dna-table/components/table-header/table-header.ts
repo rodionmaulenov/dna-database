@@ -13,6 +13,7 @@ import {MatChipsModule} from '@angular/material/chips';
 import {UploadTopSheet} from '../../../upload-top-sheet/upload-top-sheet';
 import {MatBottomSheet} from '@angular/material/bottom-sheet';
 import {FilterPersonResult} from '../../../models';
+import {Overlay} from '@angular/cdk/overlay';
 
 
 @Component({
@@ -30,6 +31,7 @@ export class TableHeader {
   private dialog = inject(MatDialog);
   private bottomSheet = inject(MatBottomSheet);
   private destroyRef = inject(DestroyRef);
+  private overlay = inject(Overlay);
 
   selectionLength = input.required<number>()
   selectionHasValue = input.required<boolean>()
@@ -81,7 +83,8 @@ export class TableHeader {
 
     dialogRef.afterClosed().subscribe(confirmed => {
       if (confirmed) {
-        const selectedPersonIds = this.selectedIds;
+        const selectedPersonIds = this.selectedIds();
+        console.log(selectedPersonIds)
         this.store.deletePersons(selectedPersonIds);
       }
     });
@@ -90,7 +93,8 @@ export class TableHeader {
   openUploadSheet(): void {
     const sheetRef = this.bottomSheet.open(UploadTopSheet, {
       hasBackdrop: true,
-      panelClass: 'components-top-sheet'
+      scrollStrategy: this.overlay.scrollStrategies.noop(),
+      panelClass: 'components-top-sheet',
     });
 
     sheetRef.afterDismissed().subscribe((result: FilterPersonResult | undefined) => {

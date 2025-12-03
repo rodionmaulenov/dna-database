@@ -130,10 +130,10 @@
       <ng-container matColumnDef="paginator-header">
         <th mat-header-cell *matHeaderCellDef [attr.colspan]="6">
           <mat-paginator
-            [length]="store.filteredTotal()"
-            [pageSize]="store.localPageSize()"
-            [pageIndex]="store.localPageIndex()"
-            (page)="store.setLocalPage($event.pageIndex)"
+            [length]="store.total()"
+            [pageSize]="store.pageSize()"
+            [pageIndex]="store.pageIndex()"
+            (page)="store.loadPage($event.pageIndex)"
             [hidePageSize]="true"
             [showFirstLastButtons]="true"
             aria-label="Select page">

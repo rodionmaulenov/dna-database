@@ -83,8 +83,8 @@ def update_person(request, person_id: int, data: UpdatePersonRequest):
 @transaction.atomic
 def delete_persons(request, person_ids_param: str = Query(..., alias='person_ids')):
     """
-    Delete one or multiple PARENTS and all related data (children, files)
-    Only parent (father/mother) IDs allowed.
+    Delete parents (with their children) OR orphan children.
+    Rejects children that have a parent - must delete parent instead.
     """
 
     try:
@@ -99,34 +99,48 @@ def delete_persons(request, person_ids_param: str = Query(..., alias='person_ids
         if not person_ids:
             return 400, {'error': 'No valid person_ids provided'}
 
-        # ========== CHECK FOR CHILDREN (REJECT) ==========
-        has_children = Person.objects.filter(
-            id__in=person_ids,
-            role='child'
-        ).exists()
-
-        if has_children:
-            return 400, {'error': 'Child deletion not allowed. Select only parents.'}
-
         # ========== CHECK ALL EXIST ==========
         existing_persons = Person.objects.filter(id__in=person_ids)
         if existing_persons.count() != len(person_ids):
             return 400, {'error': 'One or more persons not found'}
 
+        # ========== SEPARATE PARENTS AND CHILDREN ==========
+        parents = existing_persons.filter(role__in=['father', 'mother'])
+        children = existing_persons.filter(role='child')
+
+        # ========== CHECK CHILDREN HAVE NO PARENT ==========
+        for child in children:
+            # Check if child has a parent in their files
+            has_parent = Person.objects.filter(
+                uploaded_files__in=child.uploaded_files.all(),
+                role__in=['father', 'mother']
+            ).exists()
+
+            if has_parent:
+                return 400, {
+                    'error': f'Child "{child.name}" has a parent. Delete the parent instead.'
+                }
+
         # ========== DELETE ==========
         storage_service = get_storage_service()
 
-        for person in existing_persons:
-            # Get parent's files
+        # Delete orphan children first
+        for child in children:
+            child_files = child.uploaded_files.all()
+            delete_uploaded_files_with_storage(child_files, storage_service)
+            child.delete()
+
+        # Delete parents (with their children)
+        for person in parents:
             parent_files = person.uploaded_files.all()
 
-            # Find and delete children
-            children = Person.objects.filter(
+            # Find and delete related children
+            related_children = Person.objects.filter(
                 uploaded_files__in=parent_files,
                 role='child'
             ).distinct()
 
-            for child in children:
+            for child in related_children:
                 child_files = child.uploaded_files.all()
                 delete_uploaded_files_with_storage(child_files, storage_service)
                 child.delete()

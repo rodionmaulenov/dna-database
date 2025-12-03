@@ -39,9 +39,6 @@ export const DnaTableStore = signalStore(
 
   withFeature((store) =>
     withLocalFilterFeature(
-      store.loadNextBackendPage,
-      store.hasMoreBackendData,
-      store.backendTotal,
       store.tableData,
       store.collapseAll,
     )
