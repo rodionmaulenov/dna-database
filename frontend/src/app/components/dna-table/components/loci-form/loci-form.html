@@ -7,7 +7,8 @@
     <div class="locus-item">
       <mat-form-field class="locus-field" appearance="outline" subscriptSizing="dynamic">
         <mat-label>{{ locusNameField().value() }}</mat-label>
-        <input matInput [field]="allelesField" [errorStateMatcher]="immediateErrorMatcher">
+        <input matInput [field]="allelesField"
+               [errorStateMatcher]="immediateErrorMatcher">
         <mat-error>
           @if (allelesField().errors().length > 0) {
             @for (error of allelesField().errors(); track error.kind) {

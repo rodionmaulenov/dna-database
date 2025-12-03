@@ -16,6 +16,10 @@ html {
     density: 0,
   ));
 
+  @include mat.icon-button-overrides((
+    icon-color: #2962ff
+  ));
+
   @include mat.table-overrides((
     row-item-outline-color: #c4c7c5,
     background-color: #fff,
@@ -46,13 +50,13 @@ body {
 
   // Reset the user agent margin.
   margin: 0;
+  overflow-x: hidden;
 }
 
 html, body {
   height: 100%;
   scrollbar-gutter: stable;
   scroll-behavior: smooth;
-  //overflow-y: hidden;
 }
 
 body {

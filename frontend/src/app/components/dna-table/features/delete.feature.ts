@@ -4,7 +4,7 @@ import {rxMethod} from '@ngrx/signals/rxjs-interop';
 import {pipe, switchMap, tap, catchError, EMPTY} from 'rxjs';
 import {DnaTableHttpService} from '../dna-table.service';
 
-export function withDeleteFeature(reload: () => void, clearSelection: () => void) {
+export function withDeleteFeature(loadInitial: () => void, clearSelection: () => void) {
   return signalStoreFeature(
 
     withState({
@@ -27,7 +27,7 @@ export function withDeleteFeature(reload: () => void, clearSelection: () => void
               tap(() => {
                 patchState(store, {deletingPersonIds: null, isDeleting: false});
                 clearSelection();
-                reload();
+                loadInitial();
               }),
               catchError(() => {
                 patchState(store, {deletingPersonIds: null, isDeleting: false});
@@ -47,7 +47,7 @@ export function withDeleteFeature(reload: () => void, clearSelection: () => void
             service.deleteFile(fileId).pipe(
               tap(() => {
                 patchState(store, {deletingFileId: null});
-                reload();
+                loadInitial();
               }),
               catchError(() => {
                 patchState(store, {deletingFileId: null})

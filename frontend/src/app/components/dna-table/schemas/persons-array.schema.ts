@@ -1,10 +1,15 @@
 import {schema, Schema, applyEach} from '@angular/forms/signals';
-import {personWithLociSchema, PersonWithLociFormData} from './person-with-loci.schema';
+import {PersonWithLociFormData, createPersonWithLociSchema} from './person-with-loci.schema';
+import {Signal} from '@angular/core';
 
 export interface PersonsArrayFormData {
   persons: PersonWithLociFormData[];
 }
 
-export const personsArraySchema: Schema<PersonsArrayFormData> = schema<PersonsArrayFormData>((path) => {
-  applyEach(path.persons, personWithLociSchema);
-});
+export const createPersonsArraySchema = (
+  isEditMode: Signal<boolean>
+): Schema<PersonsArrayFormData> => {
+  return schema<PersonsArrayFormData>((path) => {
+    applyEach(path.persons, createPersonWithLociSchema(isEditMode));
+  });
+};

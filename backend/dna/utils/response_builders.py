@@ -98,37 +98,3 @@ def build_orphan_child_response(child: Person) -> Optional[DNADataResponse]:
     except Exception as e:
         logger.error(f"❌ build_orphan_child_response error: {e}", exc_info=True)
         return None
-
-
-# ✅ Keep old function for backward compatibility (filtering by upload)
-def build_person_response(upload, all_persons_in_file) -> Optional[DNADataResponse]:
-    """
-    Build DNADataResponse for a single upload (legacy)
-
-    Args:
-        upload: UploadedFile object
-        all_persons_in_file: QuerySet of Person objects in this file
-
-    Returns:
-        DNADataResponse or None if error
-    """
-    try:
-        # Get parent
-        parent = all_persons_in_file.filter(role__in=['father', 'mother']).first()
-        parent_data = _build_person_data(parent) if parent else None
-
-        # Get children
-        children = all_persons_in_file.filter(role='child')
-        children_data = [_build_person_data(child) for child in children]
-
-        # Return response with appropriate child structure
-        return DNADataResponse(
-            id=upload.pk,
-            parent=parent_data,
-            child=children_data[0] if len(children_data) == 1 else None,
-            children=children_data if len(children_data) > 1 else None,
-        )
-
-    except Exception as e:
-        logger.error(f"❌ build_person_response error: {e}", exc_info=True)
-        return None

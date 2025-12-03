@@ -17,9 +17,9 @@
       </mat-error>
     </mat-form-field>
 
-    <mat-form-field appearance="outline" class="role-field" subscriptSizing="dynamic">
+    <mat-form-field appearance="outline" class="role-field" subscriptSizing="dynamic" >
       <mat-label>Role</mat-label>
-      <mat-select [field]="roleField">
+      <mat-select [field]="roleField" [disabled]="!store.isEditMode()">
         <mat-option value="father">
           <mat-icon>man</mat-icon>
           Father

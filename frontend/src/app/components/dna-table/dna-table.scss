@@ -15,7 +15,7 @@
 
   ::ng-deep .mat-mdc-paginator-container {
     background-color: #fff;
-    justify-content: flex-start;
+    justify-content: flex-end;
     padding: 0;
   }
 
@@ -83,7 +83,6 @@ table {
 .mat-column-name { @include fixed-column(220px); }
 .mat-column-related_person { @include fixed-column(220px); }
 .mat-column-file { @include fixed-column(420px); }
-.mat-column-paginator-header { @include fixed-column(300px); }
 
 // ============================================
 // 6. TABLE ROWS
@@ -147,7 +146,8 @@ tr.detail-row {
 // ============================================
 .person-link {
   cursor: pointer;
-  color: #1976d2;
+  color: #0b57d0;
+  font-weight: 500;
   text-decoration: none;
   transition: all 0.2s ease;
 
@@ -219,17 +219,12 @@ tr.detail-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
   transition: opacity 0.2s;
 
   mat-icon {
     font-size: 12px;
     width: 12px;
     height: 12px;
-  }
-
-  &:hover {
-    background: #b71c1c;
   }
 
   &:disabled {

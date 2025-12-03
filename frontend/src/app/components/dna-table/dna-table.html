@@ -15,145 +15,143 @@
       </div>
     }
 
-      <table mat-table
-             [dataSource]="dataSource()"
-             [trackBy]="trackByPersonId"
-             multiTemplateDataRows
-             tabindex="0">
+    <table mat-table
+           [dataSource]="dataSource()"
+           [trackBy]="trackByPersonId"
+           multiTemplateDataRows
+           tabindex="0">
 
-        <ng-container matColumnDef="select">
-          <th mat-header-cell *matHeaderCellDef>
-            <mat-checkbox (change)="$event ? store.toggleAllRows() : null"
-                          [checked]="selection.hasValue() && store.isAllSelected()"
-                          [indeterminate]="selection.hasValue() && !store.isAllSelected()"
-                          [aria-label]="store.checkboxLabel()">
-            </mat-checkbox>
-          </th>
-          <td mat-cell *matCellDef="let row">
-            <mat-checkbox (click)="$event.stopPropagation()"
-                          (change)="$event ? selection.toggle(row) : null"
-                          [checked]="selection.isSelected(row)"
-                          [aria-label]="store.checkboxLabel(row)">
-            </mat-checkbox>
-          </td>
-        </ng-container>
+      <ng-container matColumnDef="select">
+        <th mat-header-cell *matHeaderCellDef>
+          <mat-checkbox (change)="$event ? store.toggleAllRows() : null"
+                        [checked]="selection.hasValue() && store.isAllSelected()"
+                        [indeterminate]="selection.hasValue() && !store.isAllSelected()"
+                        [aria-label]="store.checkboxLabel()">
+          </mat-checkbox>
+        </th>
+        <td mat-cell *matCellDef="let row">
+          <mat-checkbox (click)="$event.stopPropagation()"
+                        (change)="$event ? selection.toggle(row) : null"
+                        [checked]="selection.isSelected(row)"
+                        [aria-label]="store.checkboxLabel(row)">
+          </mat-checkbox>
+        </td>
+      </ng-container>
 
-        <ng-container matColumnDef="expand">
-          <th mat-header-cell *matHeaderCellDef aria-label="row actions">&nbsp;</th>
-          <td mat-cell *matCellDef="let element">
-            <button mat-icon-button
-                    aria-label="expand row"
-                    (click)="toggleExpanded(element); $event.stopPropagation()"
-                    class="toggle-button"
-                    [class.toggle-button-expanded]="expandedRowId() === element.personId">
-              <mat-icon>keyboard_arrow_down</mat-icon>
-            </button>
-          </td>
-        </ng-container>
+      <ng-container matColumnDef="expand">
+        <th mat-header-cell *matHeaderCellDef aria-label="row actions">&nbsp;</th>
+        <td mat-cell *matCellDef="let element">
+          <button mat-icon-button
+                  aria-label="expand row"
+                  (click)="toggleExpanded(element); $event.stopPropagation()"
+                  class="toggle-button"
+                  [class.toggle-button-expanded]="expandedRowId() === element.personId">
+            <mat-icon>keyboard_arrow_down</mat-icon>
+          </button>
+        </td>
+      </ng-container>
 
-        <ng-container matColumnDef="name">
-          <th mat-header-cell *matHeaderCellDef>
-          </th>
-          <td mat-cell *matCellDef="let row">{{ row.name.split(' ').slice(0, 2).join(' ') }}</td>
-        </ng-container>
+      <ng-container matColumnDef="name">
+        <th mat-header-cell *matHeaderCellDef>
+        </th>
+        <td mat-cell *matCellDef="let row">{{ row.name.split(' ').slice(0, 2).join(' ') }}</td>
+      </ng-container>
 
-        <ng-container matColumnDef="role">
-          <th mat-header-cell *matHeaderCellDef></th>
-          <td mat-cell *matCellDef="let row">{{ row.role }}</td>
-        </ng-container>
+      <ng-container matColumnDef="role">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let row">{{ row.role }}</td>
+      </ng-container>
 
-        <ng-container matColumnDef="loci_count">
-          <th mat-header-cell *matHeaderCellDef></th>
-          <td mat-cell *matCellDef="let row">{{ row.loci_count }}</td>
-        </ng-container>
+      <ng-container matColumnDef="loci_count">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let row">{{ row.loci_count }}</td>
+      </ng-container>
 
-        <ng-container matColumnDef="related_person">
-          <th mat-header-cell *matHeaderCellDef></th>
-          <td mat-cell *matCellDef="let row">
-            @if (row.relatedPersons && row.relatedPersons.length > 1) {
-              <span (click)="store.filterByMultiplePersons(
-                        getPersonIds(row.relatedPersons),
-                        row.relatedPersons[0].role,
-                        row.relatedPersons.length
-                        )"
-                    class="person-link">
-                {{ row.relatedPersons.length }}
-              </span>
-            } @else if (row.relatedPersonName && row.relatedPersonId) {
-              <span (click)="store.filterByPerson(
-                      row.relatedPersonId,
-                      row.relatedPersonRole,
-                      row.relatedPersonName
-                      )"
-                    class="person-link">
-                {{ row.relatedPersonName.split(' ').slice(0, 2).join(' ') }}
-              </span>
-            }
-          </td>
-        </ng-container>
+      <ng-container matColumnDef="related_person">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let row">
+          @if (row.relatedPersons && row.relatedPersons.length > 1) {
+            <span (click)="store.filterByMultiplePersons(row.relatedPersons)"
+                  class="person-link">
+              {{ row.relatedPersons.length }} children
+            </span>
+          } @else if (row.relatedPersonName && row.relatedPersonId) {
+            <span (click)="store.filterByPerson({
+                    personId: row.relatedPersonId,
+                    personName: row.relatedPersonName,
+                    role: row.relatedPersonRole
+                  })"
+                  class="person-link">
+              {{ row.relatedPersonName.split(' ').slice(0, 2).join(' ') }}
+            </span>
+          }
+        </td>
+      </ng-container>
 
-        <ng-container matColumnDef="file">
-          <th mat-header-cell *matHeaderCellDef></th>
-          <td mat-cell *matCellDef="let row">
-            <div class="file-chips">
-              @for (file of getFiles(row); track file.id; let idx = $index) {
-                <div class="file-chip-wrapper">
-                  <a [href]="file.file"
-                     target="_blank"
-                     class="file-chip"
-                     [matTooltip]="'Uploaded: ' + (file.uploaded_at | date:'yyyy-MM-dd HH:mm')">
-                    <mat-icon class="file-icon">picture_as_pdf</mat-icon>
-                    <span class="file-name">{{ getFileName(file.file) }}</span>
-                  </a>
+      <ng-container matColumnDef="file">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let row">
+          <div class="file-chips">
+            @for (file of getFiles(row); track file.id; let idx = $index) {
+              <div class="file-chip-wrapper">
+                <a [href]="file.file"
+                   target="_blank"
+                   class="file-chip"
+                   [matTooltip]="'Uploaded: ' + (file.uploaded_at | date:'yyyy-MM-dd HH:mm')">
+                  <mat-icon class="file-icon">picture_as_pdf</mat-icon>
+                  <span class="file-name">{{ getFileName(file.file) }}</span>
+                </a>
 
-                  <!-- ✅ Close button -->
+                <!-- ✅ Close button -->
+                @if (store.isEditMode() && expandedRowId() === row.personId) {
                   <button class="file-delete-btn"
                           (click)="confirmDeleteFile(row, file, idx); $event.stopPropagation()"
                           [disabled]="store.deletingFileId() === file.id">
                     <mat-icon>close</mat-icon>
                   </button>
-                </div>
-              }
-            </div>
-          </td>
-        </ng-container>
+                }
+              </div>
+            }
+          </div>
+        </td>
+      </ng-container>
 
-        <ng-container matColumnDef="expandedDetail">
-          <td mat-cell *matCellDef="let row" [attr.colspan]="columnsToDisplay.length">
-            <div class="element-detail-wrapper"
-                 [class.element-detail-wrapper-expanded]="expandedRowId() === row.personId">
-              @defer (when expandedRowId() === row.personId) {
-                <app-expandable-row [element]="row"></app-expandable-row>
-              }
-            </div>
-          </td>
-        </ng-container>
+      <ng-container matColumnDef="expandedDetail">
+        <td mat-cell *matCellDef="let row" [attr.colspan]="columnsToDisplay.length">
+          <div class="element-detail-wrapper"
+               [class.element-detail-wrapper-expanded]="expandedRowId() === row.personId">
+            @defer (when expandedRowId() === row.personId) {
+              <app-expandable-row [element]="row"></app-expandable-row>
+            }
+          </div>
+        </td>
+      </ng-container>
 
-        <ng-container matColumnDef="paginator-header">
-          <th mat-header-cell *matHeaderCellDef [attr.colspan]="6">
-            <mat-paginator
-              [length]="total()"
-              [pageSize]="pageSize()"
-              [pageIndex]="pageIndex()"
-              (page)="loadPage($event.pageIndex)"
-              [hidePageSize]="true"
-              [showFirstLastButtons]="true"
-              aria-label="Select page">
-            </mat-paginator>
-          </th>
-        </ng-container>
+      <ng-container matColumnDef="paginator-header">
+        <th mat-header-cell *matHeaderCellDef [attr.colspan]="6">
+          <mat-paginator
+            [length]="store.filteredTotal()"
+            [pageSize]="store.localPageSize()"
+            [pageIndex]="store.localPageIndex()"
+            (page)="store.setLocalPage($event.pageIndex)"
+            [hidePageSize]="true"
+            [showFirstLastButtons]="true"
+            aria-label="Select page">
+          </mat-paginator>
+        </th>
+      </ng-container>
 
-        <tr mat-header-row *matHeaderRowDef="headerColumns"></tr>
-        <tr mat-row
-            *matRowDef="let row; columns: columnsToDisplay;"
-            class="element-row"
-            [attr.data-person-id]="row.personId"
-            [class.expanded-row]="expandedRowId() === row.personId"
-            [class.selected-row]="selection.isSelected(row)">
-        </tr>
-        <tr mat-row *matRowDef="let row; columns: ['expandedDetail']" class="detail-row"></tr>
-      </table>
-    </div>
+      <tr mat-header-row *matHeaderRowDef="headerColumns"></tr>
+      <tr mat-row
+          *matRowDef="let row; columns: columnsToDisplay;"
+          class="element-row"
+          [attr.data-person-id]="row.personId"
+          [class.expanded-row]="expandedRowId() === row.personId"
+          [class.selected-row]="selection.isSelected(row)">
+      </tr>
+      <tr mat-row *matRowDef="let row; columns: ['expandedDetail']" class="detail-row"></tr>
+    </table>
+  </div>
 
 </div>
 

@@ -53,8 +53,8 @@ export class UploadTopSheet {
   viewPerson(personId: number, role: string, name: string): void {
     this.bottomSheetRef.dismiss({
       action: 'view_person',
-      personId: personId,
-      role: role,
+      personId,
+      role,
       personName: name
     });
   }
@@ -62,7 +62,9 @@ export class UploadTopSheet {
   viewMatch(match: MatchResult): void {
     this.bottomSheetRef.dismiss({
       action: 'view_match',
-      match: match
+      personId: match.person_id,
+      role: match.role,
+      personName: match.name
     });
   }
 }

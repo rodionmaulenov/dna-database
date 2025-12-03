@@ -1,4 +1,5 @@
-import {schema, required, Schema, validate} from '@angular/forms/signals';
+import {schema, required, Schema, validate, disabled} from '@angular/forms/signals';
+import {Signal} from '@angular/core';
 
 export interface LocusEditFormData {
   id: number;
@@ -6,33 +7,44 @@ export interface LocusEditFormData {
   alleles: string;
 }
 
-export const locusEditSchema: Schema<LocusEditFormData> = schema<LocusEditFormData>((path) => {
-  required(path.alleles, {message: 'Alleles are required'});
+export const createLocusEditSchema = (
+  isEditMode: Signal<boolean>
+): Schema<LocusEditFormData> => {
+  return schema<LocusEditFormData>((path) => {
 
-  validate(path.alleles, (ctx) => {
-    const value = ctx.value();
+    // locus_name never editable (it's the identifier)
+    disabled(path.locus_name, () => true);
 
-    const alleles = value.split(/[,\/]/).map((a: string) => a.trim());
+    // alleles editable only in edit mode
+    disabled(path.alleles, () => !isEditMode());
 
-    if (alleles.length !== 2 && value) {
-      return {
-        kind: 'invalid_allele_count',
-        message: 'Must be 2 alleles'
-      };
-    }
+    required(path.alleles, { message: 'Alleles are required' });
 
-    const pattern = /^\d+(\.\d+)?$/;
+    validate(path.alleles, (ctx) => {
+      const value = ctx.value();
+      if (!value) return null;
 
-    for (const allele of alleles) {
-      if (!pattern.test(allele) && value) {
+      const alleles = value.split(/[,\/]/).map((a: string) => a.trim());
+
+      if (alleles.length !== 2) {
         return {
-          kind: 'invalid_allele_format',
-          message: `Format 9, 12.1`
+          kind: 'invalid_allele_count',
+          message: 'Must be 2 alleles'
         };
       }
-    }
 
-    return null; // Valid
+      const pattern = /^\d+(\.\d+)?$/;
+      for (const allele of alleles) {
+        if (!pattern.test(allele)) {
+          return {
+            kind: 'invalid_allele_format',
+            message: 'Format 9, 12.1'
+          };
+        }
+      }
+
+      return null;
+    });
   });
-});
+};
 

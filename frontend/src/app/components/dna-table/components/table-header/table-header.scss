@@ -73,6 +73,20 @@
   gap: 4px;
 }
 
+.filter-chip {
+  max-width: 180px;
+
+  .mdc-evolution-chip__text-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 mat-divider {
   margin: 0;
+}
+
+.material-symbols-outlined{
+  //color: #2962ff;
 }

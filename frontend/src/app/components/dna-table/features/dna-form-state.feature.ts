@@ -1,7 +1,7 @@
 import {patchState, signalStoreFeature, withMethods, withState} from '@ngrx/signals';
 import {FieldTree, form} from '@angular/forms/signals';
 import {signal} from '@angular/core';
-import {PersonsArrayFormData, personsArraySchema} from '../schemas/persons-array.schema';
+import {createPersonsArraySchema, PersonsArrayFormData} from '../schemas/persons-array.schema';
 
 const ALL_LOCI = [
   'D1S1656', 'D2S441', 'D2S1338', 'D3S1358', 'D5S818',
@@ -21,15 +21,26 @@ export function withDnaFormState() {
     withState({
       editingPersonIdInTableRow: null as number | null,
       isEditingTableRow: false,
+      isEditMode: false,
     }),
 
     withMethods((store) => {
 
       if (!personsArrayForm) {
-        personsArrayForm = form(personsSignal, personsArraySchema);
+        // ✅ Pass isEditMode to schema factory
+        const schema = createPersonsArraySchema(store.isEditMode);
+        personsArrayForm = form(personsSignal, schema);
       }
 
       return {
+
+        toggleEditMode: () => {
+          patchState(store, {isEditMode: !store.isEditMode()});
+        },
+
+        disableEditMode() {
+          patchState(store, { isEditMode: false });
+        },
 
         personsArrayForm: () => personsArrayForm,
         personsSignal: () => personsSignal,

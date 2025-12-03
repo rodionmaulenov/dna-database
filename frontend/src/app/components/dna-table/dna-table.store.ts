@@ -1,4 +1,4 @@
-import {patchState, signalStore, withFeature} from '@ngrx/signals';
+import {signalStore, withFeature} from '@ngrx/signals';
 import {withLoadFeature} from './features/load.feature';
 import {withUploadFeature} from './features/upload.feature';
 import {withDeleteFeature} from './features/delete.feature';
@@ -15,7 +15,7 @@ export const DnaTableStore = signalStore(
   withLoadFeature(),
 
   withFeature((store) =>
-    withUploadFeature(() => store.setDnaRecordsLoading())
+    withUploadFeature(() => store.loadInitial())
   ),
 
   withExpansionFeature(),
@@ -36,13 +36,10 @@ export const DnaTableStore = signalStore(
 
   withFeature((store) =>
     withLocalFilterFeature(
+      store.loadNextBackendPage,
+      store.hasMoreBackendData,
       store.tableData,
-      (ids: string | null) => patchState(store, {remotePersonIds: ids}),
-      (names: string | null) => patchState(store, {remotePersonNames: names}),
-      (loading: boolean) => patchState(store, {isLoading: loading}),
       store.collapseAll,
-      store.isLoading,
-      store.reload,
     )
   ),
 
@@ -55,7 +52,7 @@ export const DnaTableStore = signalStore(
 
   withFeature((store) =>
     withDeleteFeature(() =>
-      store.setDnaRecordsLoading(),
+      store.loadInitial(),
       store.clearSelection,
     )
   ),

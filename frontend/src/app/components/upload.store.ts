@@ -129,7 +129,7 @@ export const UploadStore = signalStore(
                       // Show notifications
                       if (role === 'save') {
                         notificationService.success(`${file.file.name} saved to database`);
-                        tableStore.setDnaRecordsLoading();
+                        tableStore.loadInitial();
                       } else {
                         if (response.top_matches?.length) {
                           notificationService.success(`${file.file.name}: Found ${response.top_matches.length} matches`);

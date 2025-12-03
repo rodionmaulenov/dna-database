@@ -12,6 +12,7 @@ import {TableRowData} from '../../models';
 import {MatChipsModule} from '@angular/material/chips';
 import {UploadTopSheet} from '../../../upload-top-sheet/upload-top-sheet';
 import {MatBottomSheet} from '@angular/material/bottom-sheet';
+import {FilterPersonResult} from '../../../models';
 
 
 @Component({
@@ -56,6 +57,11 @@ export class TableHeader {
     { threshold: 0 }
   );
 
+  updateRow(data: TableRowData): void {
+    this.store.disableEditMode();
+    this.store.updateRow(data);
+  }
+
   getExpandedElement(): TableRowData | null {
     const id = this.expandedRowId();
     if (!id) return null;
@@ -87,21 +93,9 @@ export class TableHeader {
       panelClass: 'components-top-sheet'
     });
 
-    sheetRef.afterDismissed().subscribe((result) => {
-      if (result?.action === 'view_match') {
-        this.store.filterByPerson(
-          result.match.person_id,
-          result.match.role,
-          result.match.name
-        );
-      }
-
-      if (result?.action === 'view_person') {
-        this.store.filterByPerson(
-          result.personId,
-          result.role,
-          result.personName
-        );
+    sheetRef.afterDismissed().subscribe((result: FilterPersonResult | undefined) => {
+      if (result?.personId) {
+        this.store.filterByPerson(result);
       }
     });
   }

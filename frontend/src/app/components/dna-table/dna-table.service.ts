@@ -13,18 +13,11 @@ export class DnaTableHttpService {
   private apiUrl = this.env.apiUrl;
 
 
-  loadTableData(personIds: string | null, page: number, pageSize: number): Observable<DNADataListResponse> {
-    if (personIds) {
-      // ✅ Use filter endpoint for specific persons
-      const params = new HttpParams().set('person_ids', personIds);
-      return this.http.get<DNADataListResponse>(`${this.apiUrl}/dna/filter/`, {params});
-    } else {
-      // ✅ Use list endpoint for paginated all records
-      const params = new HttpParams()
-        .set('page', page.toString())
-        .set('page_size', pageSize.toString());
-      return this.http.get<DNADataListResponse>(`${this.apiUrl}/dna/list/`, {params});
-    }
+  loadTableData(page: number, pageSize: number): Observable<DNADataListResponse> {
+    const params = new HttpParams()
+      .set('page', page.toString())
+      .set('page_size', pageSize.toString());
+    return this.http.get<DNADataListResponse>(`${this.apiUrl}/dna/list/`, {params});
   }
 
   updatePerson(personId: number, data: UpdatePersonData): Observable<any> {
@@ -33,7 +26,7 @@ export class DnaTableHttpService {
 
   deletePersons(personIds: number[]): Observable<any> {
     const params = new HttpParams().set('person_ids', personIds.join(','));
-    return this.http.delete<any>(`${this.apiUrl}/dna/person/delete-multiple/`, { params });
+    return this.http.delete<any>(`${this.apiUrl}/dna/person/delete-multiple/`, {params});
   }
 
   deleteFile(fileId: number): Observable<DeleteFileResponse> {

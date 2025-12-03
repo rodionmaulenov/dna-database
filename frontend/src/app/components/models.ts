@@ -87,9 +87,22 @@ export interface FileUploadResponse {
   top_matches?: MatchResult[];
 }
 
+export interface FilterPersonResult {
+  action: 'view_person' | 'view_match';
+  personId: number;
+  personName: string;
+  role: string;
+}
+
 // ============================================================================
 // DNA TABLE MODELS
 // ============================================================================
+
+export interface RelatedPerson {
+  id: number;
+  name: string;
+  role: string;
+}
 
 export interface TableRowData {
   id: number;
@@ -103,11 +116,7 @@ export interface TableRowData {
   relatedPersonId: number | null;
   relatedPersonName: string | null;
   relatedPersonRole: string | null;
-  relatedPersons: Array<{
-    id: number;
-    name: string;
-    role: string;
-  }> | null;
+  relatedPersons: RelatedPerson[] | null;
 }
 
 export interface DNADataListResponse {

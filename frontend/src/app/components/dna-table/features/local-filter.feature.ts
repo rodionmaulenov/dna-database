@@ -2,23 +2,23 @@ import {
   patchState, signalStoreFeature, withComputed, withHooks, withMethods, withProps, withState
 } from '@ngrx/signals';
 import {computed, effect, Signal, untracked} from '@angular/core';
-import {TableRowData} from '../../models';
+import {RelatedPerson, TableRowData} from '../../models';
 import {MatTableDataSource} from '@angular/material/table';
 import {SelectionModel} from '@angular/cdk/collections';
 
+
 export function withLocalFilterFeature(
+  loadNextBackendPage: () => void,
+  hasMoreBackendData: Signal<boolean>,
   tableData: Signal<TableRowData[]>,
-  setRemotePersonIds: (ids: string | null) => void,
-  setRemotePersonNames: (names: string | null) => void,
-  setLoading: (loading: boolean) => void,
   collapseExpandable: () => void,
-  isLoading: Signal<boolean>,
-  reload: () => void,
 ) {
   return signalStoreFeature(
-
     withState({
-      localRoleFilter: 'parent' as 'parent' | 'child' | null
+      localRoleFilter: 'parent' as 'parent' | 'child' | null,
+      filteredPersons: [] as Array<{ id: number; name: string; role: string }>,
+      localPageIndex: 0,
+      localPageSize: 20,
     }),
 
     withProps(() => ({
@@ -31,23 +31,60 @@ export function withLocalFilterFeature(
       const filteredData = computed(() => {
         const data = tableData();
         const roleFilter = store.localRoleFilter();
+        const personFilter = store.filteredPersons();
 
-        if (!roleFilter) {
-          return data;
-        } else if (roleFilter === 'parent') {
-          return data.filter(row => row.role === 'father' || row.role === 'mother');
-        } else if (roleFilter === 'child') {
-          return data.filter(row => row.role === 'child');
+        let result = data;
+
+        // Filter by specific persons
+        if (personFilter.length > 0) {
+          const filterIds = personFilter.map(p => p.id);
+
+          if (roleFilter === 'parent') {
+            result = result.filter(row => {
+              if (row.role !== 'father' && row.role !== 'mother') return false;
+              if (filterIds.includes(row.personId)) return true;
+              if (row.relatedPersonId && filterIds.includes(row.relatedPersonId)) return true;
+              if (row.relatedPersons?.some(rp => filterIds.includes(rp.id))) return true;
+              return false;
+            });
+          } else if (roleFilter === 'child') {
+            result = result.filter(row => {
+              if (row.role !== 'child') return false;
+              if (filterIds.includes(row.personId)) return true;
+              if (row.relatedPersonId && filterIds.includes(row.relatedPersonId)) return true;
+              return false;
+            });
+          }
+        } else {
+          // No person filter - just role filter
+          if (roleFilter === 'parent') {
+            result = result.filter(row => row.role === 'father' || row.role === 'mother');
+          } else if (roleFilter === 'child') {
+            result = result.filter(row => row.role === 'child');
+          }
         }
-        return data;
+
+        return result;
       });
+
+      const paginatedData = computed(() => {
+        const data = filteredData();
+        const start = store.localPageIndex() * store.localPageSize();
+        const end = start + store.localPageSize();
+        return data.slice(start, end);
+      });
+
+      const filteredTotal = computed(() => filteredData().length);
 
       const dataSource = computed(() => store._dataSource);
 
       return {
         filteredData,
+        paginatedData,
+        filteredTotal,
         dataSource,
       };
+
     }),
 
     // ========== METHODS ==========
@@ -55,60 +92,68 @@ export function withLocalFilterFeature(
 
       setRoleFilter: (role: 'parent' | 'child' | null) => {
         collapseExpandable();
-        patchState(store, {localRoleFilter: role});
+        patchState(store, {localRoleFilter: role, localPageIndex: 0});
       },
 
-      filterByPerson: (personId: number, personRole: string, personName: string) => {
-        collapseExpandable();
-        setLoading(true);
-        setRemotePersonIds(personId.toString());
-        setRemotePersonNames(personName);
+      setLocalPage: (pageIndex: number) => {
+        const totalFiltered = store.filteredTotal();
+        const nextStart = pageIndex * store.localPageSize();
 
-        const newRoleFilter = personRole === 'child' ? 'child' : 'parent';
-
-        reload();
-
-        const checkLoading = setInterval(() => {
-          if (!isLoading()) {
-            patchState(store, {localRoleFilter: newRoleFilter});
-            clearInterval(checkLoading);
-          }
-        }, 50);
-      },
-
-      filterByMultiplePersons: (personIds: number[], personsRole: string, count: number) => {
-        collapseExpandable();
-        const idsString = personIds.join(',');
-        const displayText = `${count} related persons`;
-
-        setRemotePersonIds(idsString);
-        setRemotePersonNames(displayText);
-
-        if (personsRole === 'child') {
-          patchState(store, {localRoleFilter: 'child'});
-        } else {
-          patchState(store, {localRoleFilter: 'parent'});
+        if (nextStart < totalFiltered) {
+          collapseExpandable();
+          patchState(store, { localPageIndex: pageIndex });
         }
-        reload();
+        else if (hasMoreBackendData()) {
+          loadNextBackendPage();  // Replace old data
+          patchState(store, { localPageIndex: 0 });  // Start fresh
+        }
+      },
+
+      filterByPerson: (person: { personId: number; personName: string; role: string }) => {
+        collapseExpandable();
+        patchState(store, {
+          filteredPersons: [{id: person.personId, name: person.personName, role: person.role}],
+          localRoleFilter: person.role === 'child' ? 'child' : 'parent',
+          localPageIndex: 0
+        });
+      },
+
+      filterByMultiplePersons: (persons: RelatedPerson[]) => {
+        collapseExpandable();
+        const firstRole = persons[0]?.role;
+        patchState(store, {
+          filteredPersons: persons,
+          localRoleFilter: firstRole === 'child' ? 'child' : 'parent',
+          localPageIndex: 0
+        });
+      },
+
+      removeFilter: (personId: number) => {
+        patchState(store, {
+          filteredPersons: store.filteredPersons().filter(p => p.id !== personId),
+        });
+        if (store.filteredPersons().length === 0) {
+          patchState(store, {localRoleFilter: 'parent'})
+        }
       },
 
       clearFilter: () => {
         collapseExpandable();
-        setRemotePersonIds(null);
-        setRemotePersonNames(null);
-        patchState(store, {localRoleFilter: 'parent'});
-        reload();
+        patchState(store, {
+          filteredPersons: [],
+          localRoleFilter: 'parent',
+          localPageIndex: 0
+        });
       },
-
     })),
 
     withHooks({
       onInit(store) {
         effect(() => {
-          const filtered = store.filteredData();
+          const paginated = store.paginatedData();
 
           untracked(() => {
-            store._dataSource.data = filtered;
+            store._dataSource.data = paginated;
             store.selection.clear();
           });
         });

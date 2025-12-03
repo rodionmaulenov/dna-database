@@ -19,12 +19,19 @@
   </span>
 
   <div class="table-header-actions">
+    <!-- edit -->
+    <button mat-icon-button
+            (click)="store.toggleEditMode()"
+            matTooltip="Edit">
+      <span class="material-symbols-outlined">{{ store.isEditMode() ? 'edit_off' : 'edit' }}</span>
+    </button>
+
     <!-- Save -->
     <button mat-icon-button
             [disabled]="!expandedRowId() || !store.hasChanges(getExpandedElement()!)"
-            (click)="store.updateRow(getExpandedElement()!)"
+            (click)="updateRow(getExpandedElement()!)"
             matTooltip="Save changes">
-      <mat-icon>save</mat-icon>
+      <span class="material-symbols-outlined">save</span>
     </button>
 
     <!-- Delete -->
@@ -32,7 +39,7 @@
             [disabled]="!selectionHasValue() || store.isDeleting()"
             (click)="deleteSelected()"
             matTooltip="Delete selected">
-      <mat-icon>delete</mat-icon>
+      <span class="material-symbols-outlined">delete_forever</span>
     </button>
   </div>
 </div>
@@ -53,10 +60,14 @@
   <!-- Active Filter Chip -->
   <div>
     <mat-chip-set>
-      @if (store.remotePersonIds()) {
-        <mat-chip (removed)="store.clearFilter()">
-          <mat-icon matChipAvatar>filter_alt</mat-icon>
-          {{ store.remotePersonNames() }}
+    </mat-chip-set>
+    <mat-chip-set>
+      @for (person of store.filteredPersons(); track person.id) {
+        <mat-chip (removed)="store.removeFilter(person.id)" class="filter-chip">
+          <mat-icon matChipAvatar>
+            {{ person.role === 'child' ? 'child_care' : 'person' }}
+          </mat-icon>
+          {{ person.name }}
           <button matChipRemove>
             <mat-icon>cancel</mat-icon>
           </button>

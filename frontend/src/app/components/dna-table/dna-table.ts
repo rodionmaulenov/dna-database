@@ -38,28 +38,17 @@ export class DnaTable {
   private dialog = inject(MatDialog);
 
   columnsToDisplay = ['select', 'name', 'role', 'loci_count', 'related_person', 'file', 'expand'];
-  headerColumns = ['select', 'paginator-header', 'loci_count', 'related_person', 'file', 'expand'];
+  headerColumns = ['select', 'paginator-header'];
 
   isLoading = this.store.isLoading;
   dataSource = this.store.dataSource;
   selection = this.store.selection;
   selectedNames = this.selection.selected.map(e => e.name);
   selectedIds = this.selection.selected.map(e => e.personId);
-  total = this.store.total;
-  pageIndex = this.store.pageIndex;
-  pageSize = this.store.pageSize;
   expandedRowId = this.store.expandedRowId;
 
   trackByPersonId(_: number, row: TableRowData): number {
     return row.personId;
-  }
-
-  loadPage(pageIndex: number) {
-    this.store.loadPage(pageIndex);
-  }
-
-  getPersonIds(persons: Array<{ id: number; name: string; role: string }>): number[] {
-    return persons.map(p => p.id);
   }
 
   getFiles(element: TableRowData): Array<{ id: number; file: string; uploaded_at: string }> {

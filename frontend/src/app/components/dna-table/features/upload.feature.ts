@@ -13,7 +13,7 @@ interface FileUploadStatus {
   error?: string;
 }
 
-export function withUploadFeature(reloadData: () => void) {
+export function withUploadFeature(loadInitial: () => void) {
   return signalStoreFeature(
     withState({
       uploadQueue: [] as FileUploadStatus[],
@@ -70,7 +70,7 @@ export function withUploadFeature(reloadData: () => void) {
           tap(() => {
             patchState(store, {isUploading: false});
             if (store.uploadQueue().some(f => f.status === 'success')) {
-              reloadData();
+              loadInitial();
             }
           })
         )

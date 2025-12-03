@@ -8,26 +8,13 @@ import {DnaTableHttpService} from '../dna-table.service';
 import {TableRowData} from '../models';
 import {DnaRecord} from '../../models';
 
-interface LoadState {
-  remotePersonIds: string | null;
-  remotePersonNames: string | null;
-  pageIndex: number;
-  pageSize: number;
-  total: number;
-  isLoading: boolean;
-  error: string | null;
-}
-
 export function withLoadFeature() {
   return signalStoreFeature(
-
     withEntities(dnaEntityConfig),
 
-    withState<LoadState>({
-      remotePersonIds: null as string | null,
-      remotePersonNames: null,
-      pageIndex: 0,
-      pageSize: 20,
+    withState({
+      backendPageIndex: 0,
+      backendTotal: 0,
       total: 0,
       isLoading: true,
       error: null,
@@ -36,32 +23,35 @@ export function withLoadFeature() {
     withMethods((store) => {
       const service = inject(DnaTableHttpService);
 
-      const loadData = rxMethod<number>(
+      const loadData = rxMethod<{ page: number; append: boolean }>(
         pipe(
-          tap((pageIndex) => {
-            patchState(store, {
-              isLoading: true,
-              error: null,
-              pageIndex
-            });
+          tap(() => {
+            patchState(store, { isLoading: true, error: null });
           }),
-          switchMap((pageIndex) => {
-            const personIds = store.remotePersonIds();
-            const djangoPage = pageIndex + 1;
-
-            return service.loadTableData(personIds, djangoPage, store.pageSize()).pipe(
+          switchMap(({ page, append }) => {
+            return service.loadTableData(page + 1, 20).pipe(
               tap(response => {
-                patchState(
-                  store,
-                  setAllEntities(response.data, {collection: 'dnaRecords'}),
-                  {
-                    total: response.total,
-                    isLoading: false
-                  }
-                );
+                if (append) {
+                  // ✅ Append to existing entities
+                  const existing = store.dnaRecordsEntities();
+                  const newIds = response.data.map((r: DnaRecord) => r.id);
+                  const filtered = existing.filter(e => !newIds.includes(e.id));
+                  patchState(
+                    store,
+                    setAllEntities([...filtered, ...response.data], {collection: 'dnaRecords'}),
+                    { backendPageIndex: page, backendTotal: response.total, isLoading: false }
+                  );
+                } else {
+                  // ✅ Replace entities
+                  patchState(
+                    store,
+                    setAllEntities(response.data, {collection: 'dnaRecords'}),
+                    { backendPageIndex: page, backendTotal: response.total, isLoading: false }
+                  );
+                }
               }),
               catchError(error => {
-                patchState(store, {isLoading: false, error: error.message});
+                patchState(store, { isLoading: false, error: error.message });
                 return EMPTY;
               })
             );
@@ -70,16 +60,15 @@ export function withLoadFeature() {
       );
 
       return {
-        loadPage: (pageIndex: number) => loadData(pageIndex),
-        reload: () => loadData(store.pageIndex()),
-        setDnaRecordsLoading: () => loadData(0),
+        loadInitial: () => loadData({ page: 0, append: false }),
+        loadNextBackendPage: () => loadData({ page: store.backendPageIndex() + 1, append: true }),
+        reload: () => loadData({ page: 0, append: false }),
       };
     }),
 
-    // ✅ ADD AUTO-LOAD ON INIT
     withHooks({
       onInit(store) {
-        store.setDnaRecordsLoading();
+        store.loadInitial();
       }
     }),
 
@@ -160,7 +149,11 @@ export function withLoadFeature() {
           return transformToTableData(entities);
         }),
 
-        hasRecords: computed(() => store.dnaRecordsEntities().length > 0),
+        hasMoreBackendData: computed(() => {
+          const loaded = store.dnaRecordsEntities().length;
+          return loaded < store.backendTotal();
+        }),
+
       };
     })
   );
