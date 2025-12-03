@@ -76,14 +76,39 @@ table {
   max-width: $width;
 }
 
-.mat-column-select { @include fixed-column(80px); }
-.mat-column-expand { @include fixed-column(80px); }
-.mat-column-role { @include fixed-column(80px); }
-.mat-column-loci_count { @include fixed-column(80px); }
-.mat-column-name { @include fixed-column(220px); }
-.mat-column-related_person { @include fixed-column(220px); }
-.mat-column-file { @include fixed-column(420px); }
+.mat-column-select {
+  @include fixed-column(80px);
+}
 
+.mat-column-expand {
+  @include fixed-column(80px);
+}
+
+.mat-column-role {
+  @include fixed-column(80px);
+  color: #444746;
+}
+
+.mat-column-loci_count {
+  @include fixed-column(80px);
+  color: #444746;
+}
+
+.mat-column-name {
+  @include fixed-column(220px);
+  color: #1f1f1f;
+  font-weight: 500
+}
+
+.mat-column-related_person {
+  @include fixed-column(220px);
+}
+
+.mat-column-file {
+  @include fixed-column(420px);
+}
+
+//#444746
 // ============================================
 // 6. TABLE ROWS
 // ============================================

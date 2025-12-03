@@ -7,7 +7,7 @@ import {MatButtonModule} from '@angular/material/button';
 import {MatButtonToggleModule} from '@angular/material/button-toggle';
 import {MatPaginatorModule} from '@angular/material/paginator';
 import {MatChipsModule} from '@angular/material/chips';
-import {DatePipe} from '@angular/common';
+import {DatePipe, TitleCasePipe} from '@angular/common';
 import {DnaTableStore} from './dna-table.store';
 import {TableRowData} from './models';
 import {DeleteConfirmDialog} from '../delete-confirm-dialog/delete-confirm-dialog';
@@ -19,6 +19,7 @@ import {UploadedFile} from '../models';
 import {ExpandableRow} from './components/expandable-row/expandable-row';
 import {MatCheckboxModule} from '@angular/material/checkbox';
 import {TableHeader} from './components/table-header/table-header';
+import {formatPersonName} from '../../shared/utils/name-formatter';
 
 
 @Component({
@@ -26,7 +27,7 @@ import {TableHeader} from './components/table-header/table-header';
   imports: [
     MatTableModule, MatProgressSpinnerModule, MatInputModule, MatIconModule, MatButtonModule,
     MatButtonToggleModule, MatPaginatorModule, MatChipsModule, DatePipe, MatSelectModule, MatTooltipModule,
-    ScrollingModule, ExpandableRow, MatCheckboxModule, TableHeader,
+    ScrollingModule, ExpandableRow, MatCheckboxModule, TableHeader, TitleCasePipe,
   ],
   standalone: true,
   templateUrl: './dna-table.html',
@@ -37,12 +38,15 @@ export class DnaTable {
   store = inject(DnaTableStore);
   private dialog = inject(MatDialog);
 
+  formatName = formatPersonName;
+
   columnsToDisplay = ['select', 'name', 'role', 'loci_count', 'related_person', 'file', 'expand'];
   headerColumns = ['select', 'paginator-header'];
 
   isLoading = this.store.isLoading;
   dataSource = this.store.dataSource;
   selection = this.store.selection;
+  total = this.store.total;
   selectedNames = this.selection.selected.map(e => e.name);
   selectedIds = this.selection.selected.map(e => e.personId);
   expandedRowId = this.store.expandedRowId;

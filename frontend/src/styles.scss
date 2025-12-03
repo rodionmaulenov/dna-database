@@ -32,6 +32,11 @@ html {
   .mat-mdc-standard-chip:active {
     --mat-chip-label-text-color: #0b57d0;
   }
+
+  @include mat.chips-overrides((
+    label-text-color: #1f1f1f,
+    with-icon-icon-color: #2962ff,
+  ));
 }
 
 body {

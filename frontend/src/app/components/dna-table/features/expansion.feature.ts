@@ -1,6 +1,7 @@
 import {patchState, signalStoreFeature, withMethods, withState} from '@ngrx/signals';
+import {Signal} from '@angular/core';
 
-export function withExpansionFeature() {
+export function withExpansionFeature(disableEditMode: () => void) {
   return signalStoreFeature(
     withState({
       expandedRowId: null as number | null
@@ -12,6 +13,7 @@ export function withExpansionFeature() {
 
         if (currentId === personId) {
           patchState(store, { expandedRowId: null });
+          disableEditMode();
         } else {
           patchState(store, { expandedRowId: personId });
         }
@@ -23,6 +25,7 @@ export function withExpansionFeature() {
 
       collapseAll: () => {
         patchState(store, { expandedRowId: null });
+        disableEditMode();
       },
     })),
   );

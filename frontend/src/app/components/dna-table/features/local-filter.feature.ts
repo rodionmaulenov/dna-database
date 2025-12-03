@@ -10,6 +10,7 @@ import {SelectionModel} from '@angular/cdk/collections';
 export function withLocalFilterFeature(
   loadNextBackendPage: () => void,
   hasMoreBackendData: Signal<boolean>,
+  backendTotal: Signal<number>,
   tableData: Signal<TableRowData[]>,
   collapseExpandable: () => void,
 ) {
@@ -44,15 +45,23 @@ export function withLocalFilterFeature(
               if (row.role !== 'father' && row.role !== 'mother') return false;
               if (filterIds.includes(row.personId)) return true;
               if (row.relatedPersonId && filterIds.includes(row.relatedPersonId)) return true;
-              if (row.relatedPersons?.some(rp => filterIds.includes(rp.id))) return true;
-              return false;
+              return !!row.relatedPersons?.some(rp => filterIds.includes(rp.id));
             });
           } else if (roleFilter === 'child') {
             result = result.filter(row => {
               if (row.role !== 'child') return false;
               if (filterIds.includes(row.personId)) return true;
+              return !!(row.relatedPersonId && filterIds.includes(row.relatedPersonId));
+            });
+          } else {
+            // ✅ No role filter - show all rows related to filtered persons
+            result = result.filter(row => {
+              // Row is the filtered person
+              if (filterIds.includes(row.personId)) return true;
+              // Row is related to filtered person
               if (row.relatedPersonId && filterIds.includes(row.relatedPersonId)) return true;
-              return false;
+              // Row has related persons that match filter
+              return !!row.relatedPersons?.some(rp => filterIds.includes(rp.id));
             });
           }
         } else {
@@ -62,6 +71,7 @@ export function withLocalFilterFeature(
           } else if (roleFilter === 'child') {
             result = result.filter(row => row.role === 'child');
           }
+          // ✅ roleFilter null + no person filter = show all
         }
 
         return result;
@@ -74,7 +84,14 @@ export function withLocalFilterFeature(
         return data.slice(start, end);
       });
 
-      const filteredTotal = computed(() => filteredData().length);
+      const filteredTotal = computed(() => {
+        const localFiltered = filteredData().length;
+        const total = backendTotal();
+
+        return hasMoreBackendData()
+          ? total
+          : localFiltered;
+      })
 
       const dataSource = computed(() => store._dataSource);
 

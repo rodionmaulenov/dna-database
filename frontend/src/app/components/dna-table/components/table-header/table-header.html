@@ -22,6 +22,7 @@
     <!-- edit -->
     <button mat-icon-button
             (click)="store.toggleEditMode()"
+            [disabled]="!store.expandedRowId()"
             matTooltip="Edit">
       <span class="material-symbols-outlined">{{ store.isEditMode() ? 'edit_off' : 'edit' }}</span>
     </button>

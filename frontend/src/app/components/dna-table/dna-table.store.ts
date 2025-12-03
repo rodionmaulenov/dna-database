@@ -18,9 +18,12 @@ export const DnaTableStore = signalStore(
     withUploadFeature(() => store.loadInitial())
   ),
 
-  withExpansionFeature(),
-
   withDnaFormState(),
+
+
+  withFeature((store) =>
+    withExpansionFeature(store.disableEditMode),
+  ),
 
   withFeature((store) =>
     withTableActionsFeature(
@@ -38,6 +41,7 @@ export const DnaTableStore = signalStore(
     withLocalFilterFeature(
       store.loadNextBackendPage,
       store.hasMoreBackendData,
+      store.backendTotal,
       store.tableData,
       store.collapseAll,
     )
@@ -52,7 +56,7 @@ export const DnaTableStore = signalStore(
 
   withFeature((store) =>
     withDeleteFeature(() =>
-      store.loadInitial(),
+        store.loadInitial(),
       store.clearSelection,
     )
   ),
