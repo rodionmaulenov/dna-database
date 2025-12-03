@@ -78,7 +78,8 @@ export class TableHeader {
         type: 'persons',
         count: this.selectionLength(),
         names: this.selectedNames()
-      }
+      },
+      scrollStrategy: this.overlay.scrollStrategies.noop(),
     });
 
     dialogRef.afterClosed().subscribe(confirmed => {

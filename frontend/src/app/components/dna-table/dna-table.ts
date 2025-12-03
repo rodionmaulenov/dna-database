@@ -20,6 +20,7 @@ import {ExpandableRow} from './components/expandable-row/expandable-row';
 import {MatCheckboxModule} from '@angular/material/checkbox';
 import {TableHeader} from './components/table-header/table-header';
 import {formatPersonName} from '../../shared/utils/name-formatter';
+import {Overlay} from '@angular/cdk/overlay';
 
 
 @Component({
@@ -37,6 +38,7 @@ import {formatPersonName} from '../../shared/utils/name-formatter';
 export class DnaTable {
   store = inject(DnaTableStore);
   private dialog = inject(MatDialog);
+  private overlay = inject(Overlay);
 
   formatName = formatPersonName;
 
@@ -121,7 +123,8 @@ export class DnaTable {
       data: {
         type: 'file',
         fileIndex: index + 1
-      }
+      },
+      scrollStrategy: this.overlay.scrollStrategies.noop()
     });
 
     dialogRef.afterClosed().subscribe(confirmed => {

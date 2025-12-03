@@ -28,9 +28,6 @@ def get_all_dna_data(request, page: int = 1, page_size: int = 20):
         uploaded_files__persons__role__in=['father', 'mother']
     ).distinct()
 
-    orphans_count: int = orphan_children_qs.count()
-    total_count: int = parents_count + orphans_count
-
     # Prefetch setup
     children_prefetch = Prefetch(
         'persons',
@@ -71,11 +68,11 @@ def get_all_dna_data(request, page: int = 1, page_size: int = 20):
             if response:
                 result.append(response)
 
-    logger.info(f"📊 Returning {len(result)} records from {total_count} total")
+    logger.info(f"📊 Returning {len(result)} records from {parents_count} total")
 
     return DNADataListResponse(
         data=result,
-        total=total_count,
+        total=parents_count,  # ✅ Only parents count
         page=page,
         page_size=page_size
     )
